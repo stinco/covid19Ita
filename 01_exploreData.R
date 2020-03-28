@@ -120,6 +120,28 @@ ggplotly(p,
          tooltip = "text")
 
 
+p <- covid_prov %>% 
+  filter(denominazione_regione == regione) %>% 
+  mutate(denominazione_provincia = fct_reorder2(denominazione_provincia,
+                                                data, casi_tot)) %>% 
+  ggplot(aes(x = data, y = casi_tot,
+             color = denominazione_provincia,
+             text = popup,
+             group = denominazione_provincia)) +
+  # geom_line() +
+  # geom_point() +
+  geom_smooth(method = "loess",
+              formula = "y ~ x",
+              se = T) +
+  theme(
+    legend.box.background = element_rect(),
+    legend.box.margin = margin(6, 6, 6, 6)
+  )
+
+ggplotly(p,
+         tooltip = "text")
+
+
 
 # Filter first n province by cases
 n <- 10

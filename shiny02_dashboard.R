@@ -85,6 +85,30 @@ province_init <- covid_prov %>%
 regioni <- sort(unique(covid_prov$denominazione_regione))
 
 
+# Read map data
+map_prov <- readOGR(dsn = "data/Limiti01012020_g/ProvCM01012020_g",
+                    layer = "ProvCM01012020_g_WGS84",
+                    use_iconv = TRUE, encoding = "UTF-8")
+
+map_prov@data <- map_prov@data %>% 
+  mutate_if(.predicate = is.factor,
+            .funs = as.character)
+
+# Change reference system
+map_prov <- spTransform(map_prov, CRS("+init=epsg:4326"))
+
+# Ad info on covid19
+map_prov@data <- map_prov@data %>% 
+  left_join(covid_prov %>% 
+              filter(data == max(data)),
+            by = c("SIGLA" = "sigla_provincia"))
+
+# Create funcion for maximum value on map color scale
+ceil10 <- function(x){
+  10^ceiling(log10(max(x)))
+}
+
+
 
 # User interface ####
 ui <- dashboardPage(
@@ -97,6 +121,7 @@ ui <- dashboardPage(
     )
   }),
   dashboardBody({
+    # Tab plots ####
     tabItems(
       tabItem(tabName = "tab_plots",
               fluidRow(
@@ -141,30 +166,70 @@ ui <- dashboardPage(
                       tags$br(),
                       tags$h4("Opzioni"),
                       inputPanel(
+                        width = 5,
+                        tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
+                        tags$br(),
                         tags$div(title = "Seleziona questo checkbox per vedere il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
                                  awesomeCheckbox(
                                    inputId = "rescalePop_check",
                                    label = "Riscala sulla popolazione", 
                                    value = FALSE#,
-                                   # status = "danger"
-                                 )
-                        )
-                      )
+                                   )
+                        ),
+                        tags$br(),
+                        tags$div(title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) calcolata sui dati empirici",
+                          checkboxGroupButtons(
+                            inputId = "element_plot_check",
+                            label = "Seleziona gli elementi che vuoi visualizzare",
+                            choices = c("Dati osservati", 
+                                        "Curva approssimante"),
+                            selected = "Dati osservati",
+                            checkIcon = list(
+                              yes = tags$i(class = "fa fa-check-square", 
+                                          style = "color: steelblue"),
+                              no = tags$i(class = "fa fa-square-o", 
+                                          style = "color: steelblue"))
+                      )))
                     ),
-                    box(
-                      width = 6,
-                      tabsetPanel(
-                        tabPanel("Casi cumulati",
-                                 plotly::plotlyOutput("plot_cases_tot")),
-                        tabPanel("Casi giornalieri",
-                                 plotly::plotlyOutput("plot_cases_new"))
-                      )
+                    tags$head(tags$script('
+                      // Define function to set height of "map" and "map_container"
+                      setHeight = function() {
+                        var window_height = $(window).height();
+                        var header_height = $(".main-header").height();
+                
+                        var boxHeight = window_height - header_height - 50;
+                
+                        $("#map_container").height(boxHeight);
+                        $("#map").height(boxHeight - 20);
+                      };
+                
+                      // Set input$box_height when the connection is established
+                      $(document).on("shiny:connected", function(event) {
+                        setHeight();
+                      });
+                
+                      // Refresh the box height on every window resize event    
+                      $(window).on("resize", function(){
+                        setHeight();
+                      });
+                    ')),
+                    box(#fid = "map_container",
+                        width = 7,
+                        tabsetPanel(
+                          tabPanel("Casi cumulati",
+                                   plotly::plotlyOutput("plot_cases_tot",
+                                                        width = "100%", height = "100%")),
+                          tabPanel("Casi giornalieri",
+                                  plotly::plotlyOutput("plot_cases_new",
+                                                       width = "100%", height = "100%"))
+                        )
                     )
                   # )
                 # )
               )
                 
       ),
+      # Tab tables ####
       tabItem(tabName = "tab_tables",
               fluidRow(
                 # box(
@@ -173,9 +238,15 @@ ui <- dashboardPage(
                 # )
               )
       ),
+      # Tab maps ####
       tabItem(tabName = "tab_maps",
               fluidRow(
-
+                box(width = 5,
+                    tags$h4("Opzioni")),
+                box(id = "map_container",
+                    width = 7,
+                    leaflet::leafletOutput("map_leaflet",
+                                           width = "100%", height = "100%"))
               )
       )
     )
@@ -199,7 +270,7 @@ server <- function(input, output, session){
         ggplot(aes(x = data, y = casi_tot,
                    color = denominazione_provincia,
                    text = popup,
-                   group = 1))
+                   group = denominazione_provincia))
       
       ggplotly(p)
     } else {
@@ -211,9 +282,7 @@ server <- function(input, output, session){
           ggplot(aes(x = data, y = casi_tot_onpop,
                      color = denominazione_provincia,
                      text = popup,
-                     group = 1)) +
-          geom_line() +
-          geom_point() +
+                     group = denominazione_provincia)) +
           labs(color = "Provincia",
                y = "Casi ogni 100 000 abitanti")
       } else {
@@ -224,12 +293,25 @@ server <- function(input, output, session){
           ggplot(aes(x = data, y = casi_tot,
                      color = denominazione_provincia,
                      text = popup,
-                     group = 1)) +
-          geom_line() +
-          geom_point() +
+                     group = denominazione_provincia)) +
           labs(color = "Provincia",
                y = "Casi")
       }
+      
+      if("Dati osservati" %in% input$element_plot_check){
+        p <- p +
+          geom_line() +
+          geom_point()
+      }
+      
+      if("Curva approssimante" %in% input$element_plot_check){
+        p <- p +
+          geom_smooth(method = "loess",
+                      formula = "y ~ x",
+                      se = T,
+                      span = .5)
+      }
+      
       
       ggplotly(p, tooltip = "text")  
     }
@@ -246,7 +328,7 @@ server <- function(input, output, session){
         ggplot(aes(x = data, y = casi_tot,
                    color = denominazione_provincia,
                    text = popup,
-                   group = 1))
+                   group = denominazione_provincia))
       
       ggplotly(p)
     } else {
@@ -258,9 +340,7 @@ server <- function(input, output, session){
           ggplot(aes(x = data, y = casi_new_onpop,
                      color = denominazione_provincia,
                      text = popup,
-                     group = 1)) +
-          geom_line() +
-          geom_point() +
+                     group = denominazione_provincia)) +
           labs(color = "Provincia",
                y = "Casi ogni 100 000 abitanti")
       } else {
@@ -271,11 +351,23 @@ server <- function(input, output, session){
           ggplot(aes(x = data, y = casi_new,
                      color = denominazione_provincia,
                      text = popup,
-                     group = 1)) +
-          geom_line() +
-          geom_point() +
+                     group = denominazione_provincia)) +
           labs(color = "Provincia",
                y = "Casi")
+      }
+      
+      if("Dati osservati" %in% input$element_plot_check){
+        p <- p +
+          geom_line() +
+          geom_point()
+      }
+      
+      if("Curva approssimante" %in% input$element_plot_check){
+        p <- p +
+          geom_smooth(method = "loess",
+                      formula = "y ~ x",
+                      se = T,
+                      span = .5)
       }
       
       ggplotly(p, tooltip = "text")  
@@ -400,6 +492,34 @@ server <- function(input, output, session){
              casi_new_onpop = round(casi_new_onpop, 2)) %>% 
       arrange(desc(data), desc(casi_tot))
   })
+  
+  
+  # Create leaflet map ####
+  output$map_leaflet <-  leaflet::renderLeaflet({
+    pal_casi_tot <- colorNumeric(
+      # palette = "RdYlGn",
+      palette = c("#FFFFFFFF", rev(inferno(256))),
+      domain = c(0, log(ceil10(max(covid_prov$casi_tot + 1)))),
+      reverse = F
+    )
+    
+    leaflet(map_prov) %>% 
+      # addTiles() %>%
+      addProviderTiles(providers$CartoDB.Positron) %>% 
+      addPolygons(color = "#444444", weight = 1, smoothFactor = 0.5,
+                  opacity = 1.0, fillOpacity = 0.8,
+                  fillColor = ~pal_casi_tot(log(casi_tot + 1)),
+                  highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                      bringToFront = TRUE),
+                  popup = ~popup) %>% 
+      addLegend(position = "bottomright",
+                pal = pal_casi_tot, opacity = 1,
+                bins = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                value = log(1:10^(log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                data = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                labFormat = labelFormat(transform = exp))
+  })
+  
   
 }
 
