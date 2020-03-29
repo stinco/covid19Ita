@@ -11,6 +11,7 @@ library(tidyverse)
 library(forcats)
 library(RCurl)
 library(rgdal)
+library(rmapshaper)
 library(plotly)
 library(leaflet)
 library(ggdark)
@@ -20,6 +21,7 @@ library(shiny)
 library(shinythemes)
 library(shinyWidgets)
 library(shinydashboard)
+library(shinyjs)
 
 # Data wrangling ####
 # Set plot theme
@@ -85,23 +87,28 @@ province_init <- covid_prov %>%
 regioni <- sort(unique(covid_prov$denominazione_regione))
 
 
-# Read map data
-map_prov <- readOGR(dsn = "data/Limiti01012020_g/ProvCM01012020_g",
-                    layer = "ProvCM01012020_g_WGS84",
-                    use_iconv = TRUE, encoding = "UTF-8")
+# # Read map data
+# map_prov <- readOGR(dsn = "data/Limiti01012020_g/ProvCM01012020_g",
+#                     layer = "ProvCM01012020_g_WGS84",
+#                     use_iconv = TRUE, encoding = "UTF-8")
+# 
+# map_prov@data <- map_prov@data %>% 
+#   mutate_if(.predicate = is.factor,
+#             .funs = as.character)
+# 
+# # Change reference system
+# map_prov <- spTransform(map_prov, CRS("+init=epsg:4326"))
+# 
+# map_prov <- ms_simplify(map_prov, keep = .01)
+# 
+# save(map_prov, file = "data/map_prov_simply.RData")
+load("data/map_prov_simply.RData")
 
-map_prov@data <- map_prov@data %>% 
-  mutate_if(.predicate = is.factor,
-            .funs = as.character)
 
-# Change reference system
-map_prov <- spTransform(map_prov, CRS("+init=epsg:4326"))
 
 # Ad info on covid19
-map_prov@data <- map_prov@data %>% 
-  left_join(covid_prov %>% 
-              filter(data == max(data)),
-            by = c("SIGLA" = "sigla_provincia"))
+map_prov_data <- map_prov@data
+
 
 # Create funcion for maximum value on map color scale
 ceil10 <- function(x){
@@ -125,13 +132,15 @@ ui <- dashboardPage(
     tabItems(
       tabItem(tabName = "tab_plots",
               fluidRow(
+                shinyjs::useShinyjs(),
                 # box(
                   # sidebarLayout(
                   # column(
                     box(
                       width = 5,
                       tags$h4("Seleziona province"),
-                      inputPanel(
+                      # inputPanel(
+                      wellPanel(
                         # verticalLayout(
                             pickerInput(
                               inputId = "province_displayed",
@@ -165,8 +174,9 @@ ui <- dashboardPage(
                       ),
                       tags$br(),
                       tags$h4("Opzioni"),
-                      inputPanel(
-                        width = 5,
+                      # inputPanel(
+                      wellPanel(
+                        # width = 5,
                         tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
                         tags$br(),
                         tags$div(title = "Seleziona questo checkbox per vedere il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
@@ -174,7 +184,7 @@ ui <- dashboardPage(
                                    inputId = "rescalePop_check",
                                    label = "Riscala sulla popolazione", 
                                    value = FALSE#,
-                                   )
+                                  )
                         ),
                         tags$br(),
                         tags$div(title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) calcolata sui dati empirici",
@@ -184,12 +194,29 @@ ui <- dashboardPage(
                             choices = c("Dati osservati", 
                                         "Curva approssimante"),
                             selected = "Dati osservati",
+                            # direction = "vertical",
                             checkIcon = list(
                               yes = tags$i(class = "fa fa-check-square", 
                                           style = "color: steelblue"),
                               no = tags$i(class = "fa fa-square-o", 
                                           style = "color: steelblue"))
-                      )))
+                        )),
+                        tags$br(),
+                        tags$b("Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
+                        tags$br(),
+                        tags$div(title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
+                          awesomeCheckbox(
+                            inputId = "showSE_check",
+                            label = "Intervalli di confidenza", 
+                            value = TRUE#,
+                          ),
+                          tags$br(),
+                          sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
+                                      min = .1, max = 2, step = .1,
+                                      value = .8
+                          )
+                        )
+                      )
                     ),
                     tags$head(tags$script('
                       // Define function to set height of "map" and "map_container"
@@ -242,11 +269,29 @@ ui <- dashboardPage(
       tabItem(tabName = "tab_maps",
               fluidRow(
                 box(width = 5,
-                    tags$h4("Opzioni")),
+                    tags$h4("Opzioni"),
+                    wellPanel(
+                      sliderInput("day_slider", "Giorno di riferimento",
+                                  min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                                  value = max(covid_prov$data),
+                                  animate = T
+                      ),
+                      tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
+                      tags$br(),
+                      tags$div(title = "Seleziona questo checkbox per vedere il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
+                               awesomeCheckbox(
+                                 inputId = "rescalePop_map_check",
+                                 label = "Riscala sulla popolazione", 
+                                 value = FALSE#,
+                               )
+                      )
+                    )
+                ),
                 box(id = "map_container",
                     width = 7,
                     leaflet::leafletOutput("map_leaflet",
-                                           width = "100%", height = "100%"))
+                                           width = "100%", height = "100%")
+                )
               )
       )
     )
@@ -261,7 +306,33 @@ ui <- dashboardPage(
 # server <- function(input, output, session){}
 server <- function(input, output, session){
   
+  covid_prov_filtered <- reactive({
+    covid_prov %>% 
+      filter(denominazione_provincia %in% input$province_displayed)
+  })
+  
+  
   # Plot total cases ####
+  plot_cases_tot <- reactive({
+    if(input$rescalePop_check){
+      covid_prov_filtered() %>% 
+        ggplot(aes(x = data, y = casi_tot_onpop,
+                   color = denominazione_provincia,
+                   text = popup,
+                   group = denominazione_provincia)) +
+        labs(color = "Provincia",
+             y = "Casi ogni 100 000 abitanti")
+    } else {
+      covid_prov_filtered() %>% 
+        ggplot(aes(x = data, y = casi_tot,
+                   color = denominazione_provincia,
+                   text = popup,
+                   group = denominazione_provincia)) +
+        labs(color = "Provincia",
+             y = "Casi")
+    }
+  })
+  
   output$plot_cases_tot <- plotly::renderPlotly({
     
     if(is.null(input$province_displayed)){
@@ -272,31 +343,19 @@ server <- function(input, output, session){
                    text = popup,
                    group = denominazione_provincia))
       
-      ggplotly(p)
-    } else {
       if(input$rescalePop_check){
-        p <- covid_prov %>% 
-          filter(denominazione_provincia %in% input$province_displayed) %>% 
-          # mutate(denominazione_provincia = fct_relevel(denominazione_provincia,
-          #                                              province)) %>% 
-          ggplot(aes(x = data, y = casi_tot_onpop,
-                     color = denominazione_provincia,
-                     text = popup,
-                     group = denominazione_provincia)) +
+        p <- p +
           labs(color = "Provincia",
                y = "Casi ogni 100 000 abitanti")
       } else {
-        p <- covid_prov %>% 
-          filter(denominazione_provincia %in% input$province_displayed) %>% 
-          # mutate(denominazione_provincia = fct_relevel(denominazione_provincia,
-          #                                              province)) %>% 
-          ggplot(aes(x = data, y = casi_tot,
-                     color = denominazione_provincia,
-                     text = popup,
-                     group = denominazione_provincia)) +
+        p <- p +
           labs(color = "Provincia",
                y = "Casi")
       }
+      
+    } else {
+      
+      p <- plot_cases_tot()
       
       if("Dati osservati" %in% input$element_plot_check){
         p <- p +
@@ -308,18 +367,39 @@ server <- function(input, output, session){
         p <- p +
           geom_smooth(method = "loess",
                       formula = "y ~ x",
-                      se = T,
-                      span = .5)
+                      se = input$showSE_check,
+                      span = input$span_slider)
       }
       
-      
-      ggplotly(p, tooltip = "text")  
     }
+    
+    ggplotly(p, tooltip = "text")
     
   })
   
   
   # Plot new cases ####
+  plot_cases_new <- reactive({
+    if(input$rescalePop_check){
+      covid_prov_filtered() %>% 
+        ggplot(aes(x = data, y = casi_new_onpop,
+                   color = denominazione_provincia,
+                   text = popup,
+                   group = denominazione_provincia)) +
+        labs(color = "Provincia",
+             y = "Casi ogni 100 000 abitanti")
+    } else {
+      covid_prov_filtered() %>% 
+        ggplot(aes(x = data, y = casi_new,
+                   color = denominazione_provincia,
+                   text = popup,
+                   group = denominazione_provincia)) +
+        labs(color = "Provincia",
+             y = "Casi")
+    }
+  })
+  
+  
   output$plot_cases_new <- plotly::renderPlotly({
     
     if(is.null(input$province_displayed)){
@@ -330,31 +410,18 @@ server <- function(input, output, session){
                    text = popup,
                    group = denominazione_provincia))
       
-      ggplotly(p)
-    } else {
       if(input$rescalePop_check){
-        p <- covid_prov %>% 
-          filter(denominazione_provincia %in% input$province_displayed) %>% 
-          # mutate(denominazione_provincia = fct_relevel(denominazione_provincia,
-          #                                              province)) %>% 
-          ggplot(aes(x = data, y = casi_new_onpop,
-                     color = denominazione_provincia,
-                     text = popup,
-                     group = denominazione_provincia)) +
+        p <- p +
           labs(color = "Provincia",
                y = "Casi ogni 100 000 abitanti")
       } else {
-        p <- covid_prov %>% 
-          filter(denominazione_provincia %in% input$province_displayed) %>% 
-          # mutate(denominazione_provincia = fct_relevel(denominazione_provincia,
-          #                                              province)) %>% 
-          ggplot(aes(x = data, y = casi_new,
-                     color = denominazione_provincia,
-                     text = popup,
-                     group = denominazione_provincia)) +
+        p <- p +
           labs(color = "Provincia",
                y = "Casi")
       }
+    } else {
+      
+      p <- plot_cases_new()
       
       if("Dati osservati" %in% input$element_plot_check){
         p <- p +
@@ -366,12 +433,13 @@ server <- function(input, output, session){
         p <- p +
           geom_smooth(method = "loess",
                       formula = "y ~ x",
-                      se = T,
-                      span = .5)
+                      se = input$showSE_check,
+                      span = input$span_slider)
       }
-      
-      ggplotly(p, tooltip = "text")  
+    
     }
+    
+    ggplotly(p, tooltip = "text")
     
   })
   
@@ -424,20 +492,8 @@ server <- function(input, output, session){
       footer = tagList(
         modalButton("Cancel"),
         actionButton("select_top_n_button_ok", "Ok")
-        # modalButton("select_top_n_button_ok", "Ok")
       )
     ))
-    # shinyalert(
-    #   title = "Seleziona le prime n province",
-    #   numericInput("top_n", "Scegli quante province vuoi visualizzare",
-    #                value = 5, min = 1, max = 20, step = 1),
-    #   easyClose = TRUE,
-    #   footer = tagList(
-    #     modalButton("Cancel"),
-    #     actionButton("select_top_n_button_ok", "Ok")
-    #     # modalButton("select_top_n_button_ok", "Ok")
-    #   )
-    # )
   })
   
   observeEvent(input$select_top_n_button_ok, {
@@ -478,6 +534,17 @@ server <- function(input, output, session){
   }, ignoreInit = TRUE)
   
   
+  # Disable input elements for Confidence intervals ####
+  observeEvent(input$element_plot_check, {
+    if("Curva approssimante" %in% input$element_plot_check){
+      shinyjs::enable("showSE_check")
+      shinyjs::enable("span_slider")
+    } else {
+      shinyjs::disable("showSE_check")
+      shinyjs::disable("span_slider")
+    }
+  })
+  
   
   # Create table ####
   output$table_provinces <- DT::renderDataTable({
@@ -495,29 +562,96 @@ server <- function(input, output, session){
   
   
   # Create leaflet map ####
-  output$map_leaflet <-  leaflet::renderLeaflet({
-    pal_casi_tot <- colorNumeric(
-      # palette = "RdYlGn",
-      palette = c("#FFFFFFFF", rev(inferno(256))),
-      domain = c(0, log(ceil10(max(covid_prov$casi_tot + 1)))),
-      reverse = F
-    )
+  pal_casi_tot <- reactive({colorNumeric(
+    # palette = "RdYlGn",
+    palette = c("#FFFFFFFF", rev(inferno(256))),
+    domain = c(0, log(ceil10(max(covid_prov$casi_tot + 1)))),
+    reverse = F
+  )})
+  
+  pal_casi_tot_onpop <- reactive({colorNumeric(
+    # palette = "RdYlGn",
+    palette = c("#FFFFFFFF", rev(inferno(256))),
+    domain = c(0, log(ceil10(max(covid_prov$casi_tot_onpop + 1)))),
+    reverse = F
+  )})
+  
+  
+  output$map_leaflet <- leaflet::renderLeaflet({
+    map_prov@data <- map_prov_data %>% 
+      left_join(covid_prov %>% 
+                  filter(data == max(data)),
+                by = c("SIGLA" = "sigla_provincia"))
     
-    leaflet(map_prov) %>% 
-      # addTiles() %>%
+    leaflet(data = map_prov) %>% 
       addProviderTiles(providers$CartoDB.Positron) %>% 
-      addPolygons(color = "#444444", weight = 1, smoothFactor = 0.5,
+      setView(lng = 12, lat = 42, zoom = 5.5) %>%
+      addPolygons(layerId = ~SIGLA,
+                  color = "#444444", weight = 1, smoothFactor = 0.5,
                   opacity = 1.0, fillOpacity = 0.8,
-                  fillColor = ~pal_casi_tot(log(casi_tot + 1)),
+                  fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
                   highlightOptions = highlightOptions(color = "white", weight = 2,
                                                       bringToFront = TRUE),
-                  popup = ~popup) %>% 
+                  popup = ~popup) %>%
       addLegend(position = "bottomright",
-                pal = pal_casi_tot, opacity = 1,
+                pal = pal_casi_tot(), opacity = 1,
                 bins = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
                 value = log(1:10^(log10(ceil10(max(covid_prov$casi_tot + 1))))),
                 data = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
                 labFormat = labelFormat(transform = exp))
+  })
+  
+  observeEvent(input$rescalePop_map_check, {
+    if(input$rescalePop_map_check){
+      leafletProxy("map_leaflet", data = map_prov) %>%
+        clearControls() %>% 
+        addLegend(position = "bottomright",
+                  pal = pal_casi_tot_onpop(), opacity = 1,
+                  bins = log(10^(0:log10(ceil10(max(covid_prov$casi_tot_onpop + 1))))),
+                  value = log(1:10^(log10(ceil10(max(covid_prov$casi_tot_onpop + 1))))),
+                  data = log(10^(0:log10(ceil10(max(covid_prov$casi_tot_onpop + 1))))),
+                  labFormat = labelFormat(transform = exp,
+                                          suffix = " /100 000"))
+    } else {
+      leafletProxy("map_leaflet", data = map_prov) %>%
+        clearControls() %>% 
+        addLegend(position = "bottomright",
+                  pal = pal_casi_tot(), opacity = 1,
+                  bins = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                  value = log(1:10^(log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                  data = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
+                  labFormat = labelFormat(transform = exp))
+    }
+  })
+  
+  
+  observe({
+    map_prov@data <- map_prov_data %>% 
+      left_join(covid_prov %>% 
+                  filter(data == input$day_slider),
+                by = c("SIGLA" = "sigla_provincia"))
+    
+    if(input$rescalePop_map_check){
+      leafletProxy("map_leaflet", data = map_prov) %>% 
+        addPolygons(layerId = ~SIGLA,
+                    color = "#444444", weight = 1, smoothFactor = 0.5,
+                    opacity = 1.0, fillOpacity = 0.8,
+                    fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
+                    highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                        bringToFront = TRUE),
+                    popup = ~popup)  
+    } else {
+      leafletProxy("map_leaflet", data = map_prov) %>% 
+        addPolygons(layerId = ~SIGLA,
+                    color = "#444444", weight = 1, smoothFactor = 0.5,
+                    opacity = 1.0, fillOpacity = 0.8,
+                    fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
+                    highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                        bringToFront = TRUE),
+                    popup = ~popup)
+    }
+    
+    
   })
   
   
