@@ -102,7 +102,7 @@ regioni <- sort(unique(covid_prov$denominazione_regione))
 
 
 # # Read map data
-# map_prov <- readOGR(dsn = "data/Limiti01012020_g/ProvCM01012020_g",
+# map_prov <- readOGR(dsn = "maps_data/Limiti01012020_g/ProvCM01012020_g",
 #                     layer = "ProvCM01012020_g_WGS84",
 #                     use_iconv = TRUE, encoding = "UTF-8")
 # 
