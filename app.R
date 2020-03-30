@@ -57,7 +57,7 @@ covid_prov <- covid_prov %>%
 
 
 # Data on population
-pop_prov <- read_csv2("data/pop_prov_italia.csv",
+pop_prov <- read_csv2("www/data/pop_prov_italia.csv",
                       na = "")
 
 covid_prov <- covid_prov %>% 
@@ -74,6 +74,19 @@ covid_prov <- covid_prov %>%
                        "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
                        "<br>Nuovi casi: ", casi_new,
                        "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000"))
+
+split_tibble <- function(tibble, column = 'col') {
+  tibble %>%
+    split(., .[,column]) %>%
+    lapply(., function(x) x[,setdiff(names(x),column)])
+}
+
+province_list <- covid_prov %>% 
+  select(denominazione_regione, denominazione_provincia) %>% 
+  unique() %>% 
+  split_tibble(column = "denominazione_regione") %>% 
+  lapply(function(x){x[["denominazione_provincia"]]})
+  
 
 province <- sort(unique(covid_prov$denominazione_provincia))
 
@@ -102,8 +115,8 @@ regioni <- sort(unique(covid_prov$denominazione_regione))
 # 
 # map_prov <- ms_simplify(map_prov, keep = .01)
 # 
-# save(map_prov, file = "data/map_prov_simply.RData")
-load("data/map_prov_simply.RData")
+# save(map_prov, file = "www/data/map_prov_simply.RData")
+load("www/data/map_prov_simply.RData")
 
 
 
@@ -120,7 +133,7 @@ ceil10 <- function(x){
 
 # User interface ####
 ui <- dashboardPage(
-  dashboardHeader(title = "Diffusione del Covid-19 nelle province italiane", titleWidth = 400,
+  dashboardHeader(title = "Diffusione del Covid-19 in Italia", titleWidth = 400,
                   tags$li(class = "dropdown", tags$a(href = "https://www.linkedin.com/in/leonardo-stincone/",
                                                      icon("linkedin"), "My Profile", target = "_blank")
                           ),
@@ -156,7 +169,8 @@ ui <- dashboardPage(
                             pickerInput(
                               inputId = "province_displayed",
                               label = "Seleziona province", 
-                              choices = province,
+                              # choices = province,
+                              choices = province_list,
                               selected = province_init,
                               multiple = TRUE,
                               options = list(
@@ -212,9 +226,9 @@ ui <- dashboardPage(
                               no = tags$i(class = "fa fa-square-o", 
                                           style = "color: steelblue"))
                         )),
-                        tags$br(),
-                        tags$b("Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
-                        tags$br(),
+                        # tags$br(),
+                        # tags$b("Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
+                        # tags$br(),
                         tags$div(title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
                           awesomeCheckbox(
                             inputId = "showSE_check",
@@ -564,7 +578,11 @@ server <- function(input, output, session){
     if("Curva approssimante" %in% input$element_plot_check){
       shinyjs::enable("showSE_check")
       shinyjs::enable("span_slider")
+      shinyjs::show("showSE_check", anim = T)
+      shinyjs::show("span_slider", anim = T)
     } else {
+      shinyjs::hide("showSE_check", anim = T)
+      shinyjs::hide("span_slider", anim = T)
       shinyjs::disable("showSE_check")
       shinyjs::disable("span_slider")
     }
@@ -747,8 +765,9 @@ server <- function(input, output, session){
     }
   })
   
+  # Close server session when the browser tab get closed
+  session$onSessionEnded(stopApp)
     
-  
 }
 
 
