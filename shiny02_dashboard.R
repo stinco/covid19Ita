@@ -22,6 +22,7 @@ library(shinythemes)
 library(shinyWidgets)
 library(shinydashboard)
 library(shinyjs)
+# library(fontawesome)
 
 # Data wrangling ####
 # Set plot theme
@@ -119,15 +120,25 @@ ceil10 <- function(x){
 
 # User interface ####
 ui <- dashboardPage(
-  dashboardHeader(title = "Diffusione covid-19 nelle province italiane", titleWidth = 400),
+  dashboardHeader(title = "Diffusione del Covid-19 nelle province italiane", titleWidth = 400,
+                  tags$li(class = "dropdown", tags$a(href = "https://www.linkedin.com/in/leonardo-stincone/",
+                                                     icon("linkedin"), "My Profile", target = "_blank")
+                          ),
+                  tags$li(class = "dropdown", tags$a(href = "https://github.com/stinco/covid19ItaProv",
+                                                     icon("github"), "Source Code", target ="_blank"))
+  ),
   dashboardSidebar({
     sidebarMenu(
       menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome")),
-                menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome")),
-                menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome"))
+      menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome")),
+      menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
     )
   }),
-  dashboardBody({
+  dashboardBody(
+    tags$head(
+      tags$link(rel = "stylesheet", type = "text/css", href = "headerStyle.css.css")
+    ),
+    {
     # Tab plots ####
     tabItems(
       tabItem(tabName = "tab_plots",
@@ -179,7 +190,7 @@ ui <- dashboardPage(
                         # width = 5,
                         tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
                         tags$br(),
-                        tags$div(title = "Seleziona questo checkbox per vedere il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
+                        tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
                                  awesomeCheckbox(
                                    inputId = "rescalePop_check",
                                    label = "Riscala sulla popolazione", 
@@ -208,7 +219,7 @@ ui <- dashboardPage(
                           awesomeCheckbox(
                             inputId = "showSE_check",
                             label = "Intervalli di confidenza", 
-                            value = TRUE#,
+                            value = FALSE#,
                           ),
                           tags$br(),
                           sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
@@ -271,19 +282,33 @@ ui <- dashboardPage(
                 box(width = 5,
                     tags$h4("Opzioni"),
                     wellPanel(
-                      sliderInput("day_slider", "Giorno di riferimento",
-                                  min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
-                                  value = max(covid_prov$data),
-                                  animate = T
+                      tags$div(title = "Premi il tasto play per visualizzare l'evoluzione nel tempo",
+                        # sliderInput("day_slider", "Giorno di riferimento",
+                        #             min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                        #             value = max(covid_prov$data),
+                        #             animate = T
+                        # )
+                        uiOutput("day_slider")
                       ),
                       tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
                       tags$br(),
-                      tags$div(title = "Seleziona questo checkbox per vedere il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
+                      tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
                                awesomeCheckbox(
                                  inputId = "rescalePop_map_check",
                                  label = "Riscala sulla popolazione", 
                                  value = FALSE#,
                                )
+                      ),
+                      radioGroupButtons(
+                        inputId = "variable_map_radio",
+                        label = "Seleziona che dati vuoi visualizzare",
+                        choices = c("Casi cumulati totali", "Casi per periodo"),
+                        individual = TRUE,
+                        checkIcon = list(
+                          yes = tags$i(class = "fa fa-circle", 
+                                       style = "color: steelblue"),
+                          no = tags$i(class = "fa fa-circle-o", 
+                                      style = "color: steelblue"))
                       )
                     )
                 ),
@@ -626,34 +651,103 @@ server <- function(input, output, session){
   
   
   observe({
-    map_prov@data <- map_prov_data %>% 
-      left_join(covid_prov %>% 
-                  filter(data == input$day_slider),
-                by = c("SIGLA" = "sigla_provincia"))
     
-    if(input$rescalePop_map_check){
-      leafletProxy("map_leaflet", data = map_prov) %>% 
-        addPolygons(layerId = ~SIGLA,
-                    color = "#444444", weight = 1, smoothFactor = 0.5,
-                    opacity = 1.0, fillOpacity = 0.8,
-                    fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
-                    highlightOptions = highlightOptions(color = "white", weight = 2,
-                                                        bringToFront = TRUE),
-                    popup = ~popup)  
-    } else {
-      leafletProxy("map_leaflet", data = map_prov) %>% 
-        addPolygons(layerId = ~SIGLA,
-                    color = "#444444", weight = 1, smoothFactor = 0.5,
-                    opacity = 1.0, fillOpacity = 0.8,
-                    fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
-                    highlightOptions = highlightOptions(color = "white", weight = 2,
-                                                        bringToFront = TRUE),
-                    popup = ~popup)
+    # print("Day slider")
+    # print(input$day_slider)
+    # print("Day slider 1")
+    # print(input$day_slider1)
+    # print("Day slider 2")
+    # print(input$day_slider2)
+    
+    
+    
+    # if(length(input$day_slider == 1)){
+    if(input$variable_map_radio == "Casi cumulati totali" & !is.null(input$day_slider1)){
+      # Visualize total cumulated cases
+      map_prov@data <- map_prov_data %>%
+        left_join(covid_prov %>%
+                    filter(data == input$day_slider1),
+                  by = c("SIGLA" = "sigla_provincia"))
+
+      if(input$rescalePop_map_check){
+        leafletProxy("map_leaflet", data = map_prov) %>%
+          addPolygons(layerId = ~SIGLA,
+                      color = "#444444", weight = 1, smoothFactor = 0.5,
+                      opacity = 1.0, fillOpacity = 0.8,
+                      fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
+                      highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                          bringToFront = TRUE),
+                      popup = ~popup)
+      } else {
+        leafletProxy("map_leaflet", data = map_prov) %>%
+          addPolygons(layerId = ~SIGLA,
+                      color = "#444444", weight = 1, smoothFactor = 0.5,
+                      opacity = 1.0, fillOpacity = 0.8,
+                      fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
+                      highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                          bringToFront = TRUE),
+                      popup = ~popup)
+      }
+    } else if(!is.null(input$day_slider2)) {
+      #  Visualize cases over period
+      
+      map_prov@data <- map_prov_data %>%
+        left_join(covid_prov %>%
+                    filter(data >= input$day_slider2[1] &
+                             data <= input$day_slider2[2]) %>% 
+                    group_by(sigla_provincia) %>% 
+                    summarize(denominazione_provincia = max(denominazione_provincia),
+                              casi_tot = sum(casi_new),
+                              casi_tot_onpop = sum(casi_new_onpop)) %>% 
+                    mutate(casi_tot = ifelse(casi_tot < 0, 0, casi_tot),
+                           casi_tot_onpop = ifelse(casi_tot_onpop < 0, 0, casi_tot_onpop),
+                           popup = str_c("<b>", denominazione_provincia, "</b>",
+                                         "<br>Periodo: ", input$day_slider2[1], ", ", input$day_slider2[2],
+                                         "<br>Totale casi nel periodo: ", casi_tot,
+                                         "<br>Totale casi nel periodo / pop: ", round(casi_tot_onpop, 2), " /100 000")),
+                  by = c("SIGLA" = "sigla_provincia"))
+      
+      if(input$rescalePop_map_check){
+        leafletProxy("map_leaflet", data = map_prov) %>%
+          addPolygons(layerId = ~SIGLA,
+                      color = "#444444", weight = 1, smoothFactor = 0.5,
+                      opacity = 1.0, fillOpacity = 0.8,
+                      fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
+                      highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                          bringToFront = TRUE),
+                      popup = ~popup)
+      } else {
+        leafletProxy("map_leaflet", data = map_prov) %>%
+          addPolygons(layerId = ~SIGLA,
+                      color = "#444444", weight = 1, smoothFactor = 0.5,
+                      opacity = 1.0, fillOpacity = 0.8,
+                      fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
+                      highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                          bringToFront = TRUE),
+                      popup = ~popup)
+      }
     }
+    
     
     
   })
   
+  
+  output$day_slider <- renderUI({
+    if(input$variable_map_radio == "Casi cumulati totali"){
+      sliderInput("day_slider1", "Giorno di riferimento",
+                  min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                  value = max(covid_prov$data),
+                  animate = T)
+    } else {
+      sliderInput("day_slider2", "Periodo di riferimento",
+                  min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                  value = c(max(covid_prov$data) - 6, max(covid_prov$data)),
+                  animate = T)
+    }
+  })
+  
+    
   
 }
 

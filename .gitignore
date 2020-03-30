@@ -39,3 +39,6 @@ rsconnect/
 # Cache figures
 figure/
 .Rproj.user
+
+# Some draft and trials
+draft/
