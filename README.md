@@ -1,6 +1,6 @@
 # Covid-19 in Italy with R Shiny
 
-![header](img/screenshot_plot.png.png)
+![header](img/screenshot_plot.png)
 
 
 ## App description
@@ -17,6 +17,6 @@ You can find more information on R Shiny [here](https://shiny.rstudio.com/).
 
 ## Data
 
-The Covid-19 italian data comes from the official GitHub repository made by the Protezione Civile: https://github.com/pcm-dpc/COVID-19
+The Covid-19 italian data comes from the [official GitHub repository made by the Protezione Civile](https://github.com/pcm-dpc/COVID-19).
 
 
