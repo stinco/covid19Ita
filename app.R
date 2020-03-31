@@ -137,7 +137,7 @@ ui <- dashboardPage(
                   tags$li(class = "dropdown", tags$a(href = "https://www.linkedin.com/in/leonardo-stincone/",
                                                      icon("linkedin"), "My Profile", target = "_blank")
                           ),
-                  tags$li(class = "dropdown", tags$a(href = "https://github.com/stinco/covid19ItaProv",
+                  tags$li(class = "dropdown", tags$a(href = "https://github.com/stinco/covid19Ita",
                                                      icon("github"), "Source Code", target ="_blank"))
   ),
   dashboardSidebar({
