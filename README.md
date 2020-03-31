@@ -5,14 +5,12 @@
 
 ## App description
 
-With this web app you can explore the Covid-19 spreading in Italy. The whole app has been made with R Shiny.
+With this web app you can explore the Covid-19 spreading in Italy. The whole app has been made with [R Shiny](https://shiny.rstudio.com/).
 
 
 ## Project description
 
 The file `app.R` contains all the code that runs the app.
-
-You can find more information on R Shiny [here](https://shiny.rstudio.com/).
 
 
 ## Data
