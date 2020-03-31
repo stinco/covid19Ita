@@ -143,8 +143,8 @@ ui <- dashboardPage(
   dashboardSidebar({
     sidebarMenu(
       menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome")),
-      menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome")),
-      menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
+      menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome"))#,
+      # menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
     )
   }),
   dashboardBody(
@@ -226,22 +226,29 @@ ui <- dashboardPage(
                               no = tags$i(class = "fa fa-square-o", 
                                           style = "color: steelblue"))
                         )),
-                        # tags$br(),
-                        # tags$b("Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
-                        # tags$br(),
-                        tags$div(title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
-                          awesomeCheckbox(
-                            inputId = "showSE_check",
-                            label = "Intervalli di confidenza", 
-                            value = FALSE#,
-                          ),
+                        hidden(
                           tags$br(),
-                          sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
-                                      min = .1, max = 2, step = .1,
-                                      value = .8
-                          )
+                          tags$b(id = "showSE_text", "Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
+                          tags$br()
+                        ),
+                        tags$div(id = "tooltip_check",
+                                   title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
+                                   hidden(
+                                   awesomeCheckbox(
+                              inputId = "showSE_check",
+                              label = "Intervalli di confidenza", 
+                              value = FALSE#,
+                            )
+                          ),
+                          tags$br()
+                        ),
+                        hidden(
+                            sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
+                                        min = .1, max = 2, step = .1,
+                                        value = .8
+                            )
                         )
-                      )
+                        )
                     ),
                     tags$head(tags$script('
                       // Define function to set height of "map" and "map_container"
@@ -281,15 +288,15 @@ ui <- dashboardPage(
               )
                 
       ),
-      # Tab tables ####
-      tabItem(tabName = "tab_tables",
-              fluidRow(
-                # box(
-                  # width = 8, height = 6,
-                  DT::dataTableOutput("table_provinces")
-                # )
-              )
-      ),
+      # # Tab tables ####
+      # tabItem(tabName = "tab_tables",
+      #         fluidRow(
+      #           # box(
+      #             # width = 8, height = 6,
+      #             DT::dataTableOutput("table_provinces")
+      #           # )
+      #         )
+      # ),
       # Tab maps ####
       tabItem(tabName = "tab_maps",
               fluidRow(
@@ -576,15 +583,19 @@ server <- function(input, output, session){
   # Disable input elements for Confidence intervals ####
   observeEvent(input$element_plot_check, {
     if("Curva approssimante" %in% input$element_plot_check){
-      shinyjs::enable("showSE_check")
-      shinyjs::enable("span_slider")
+      # shinyjs::enable("showSE_check")
+      # shinyjs::enable("span_slider")
+      # shynyjs::show("tooltip_check", anim = T)
+      shinyjs::show("showSE_text", anim = T)
       shinyjs::show("showSE_check", anim = T)
       shinyjs::show("span_slider", anim = T)
     } else {
+      # shynyjs::hide("tooltip_check", anim = T)
+      shinyjs::hide("showSE_text", anim = T)
       shinyjs::hide("showSE_check", anim = T)
       shinyjs::hide("span_slider", anim = T)
-      shinyjs::disable("showSE_check")
-      shinyjs::disable("span_slider")
+      # shinyjs::disable("showSE_check")
+      # shinyjs::disable("span_slider")
     }
   })
   
