@@ -148,9 +148,9 @@ ui <- dashboardPage(
     )
   }),
   dashboardBody(
-    tags$head(
-      tags$link(rel = "stylesheet", type = "text/css", href = "headerStyle.css.css")
-    ),
+    # tags$head(
+    #   tags$link(rel = "stylesheet", type = "text/css", href = "headerStyle.css.css")
+    # ),
     {
     # Tab plots ####
     tabItems(
@@ -230,7 +230,8 @@ ui <- dashboardPage(
                           tags$br(),
                           tags$b(id = "showSE_text", "Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
                           tags$br()
-                        ),
+                        )
+                      ,
                         tags$div(id = "tooltip_check",
                                    title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
                                    hidden(
@@ -239,7 +240,8 @@ ui <- dashboardPage(
                               label = "Intervalli di confidenza", 
                               value = FALSE#,
                             )
-                          ),
+                          )
+                      ,
                           tags$br()
                         ),
                         hidden(
