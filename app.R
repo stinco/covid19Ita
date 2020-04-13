@@ -22,7 +22,9 @@ library(shinythemes)
 library(shinyWidgets)
 library(shinydashboard)
 library(shinyjs)
+library(shinycssloaders)
 # library(fontawesome)
+library(mgcv)             # For GAMs
 
 # Data wrangling ####
 # Set plot theme
@@ -33,6 +35,7 @@ theme_set(theme_bw())
 
 # Read data
 url <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv")
+# url <- "www/data/dpc-covid19-ita-province.csv"
 covid_prov <- read_csv(url, na = "")
 
 # Remove summary rows
@@ -52,7 +55,9 @@ covid_prov <- covid_prov %>%
               mutate(data = data + 1),
             by = c("data", "sigla_provincia")) %>% 
   mutate(casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
-         casi_new = casi_tot - casi_tot_previous_day) %>% 
+         casi_new = casi_tot - casi_tot_previous_day) %>%
+  # Fix the problem of negative data in daily cases
+  mutate(casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
   select(-casi_tot_previous_day)
 
 
@@ -129,6 +134,19 @@ ceil10 <- function(x){
   10^ceiling(log10(max(x)))
 }
 
+# Define models for trend approximations
+model_new <- function(df, sp) {
+  gam(formula = casi_new ~ s(as.numeric(data), k = 10) + offset(log(popolazione)),
+      sp = sp,
+      data = df,
+      family = poisson(link = "log"))
+}
+model_tot <- function(df, sp) {
+  gam(formula = casi_tot ~ s(as.numeric(data), k = 10) + offset(log(popolazione)),
+      sp = sp,
+      data = df,
+      family = poisson(link = "log"))
+}
 
 
 # User interface ####
@@ -142,8 +160,8 @@ ui <- dashboardPage(
   ),
   dashboardSidebar({
     sidebarMenu(
-      menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome")),
-      menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome"))#,
+      menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome")),
+      menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome"))#,
       # menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
     )
   }),
@@ -212,7 +230,8 @@ ui <- dashboardPage(
                                   )
                         ),
                         tags$br(),
-                        tags$div(title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) calcolata sui dati empirici",
+                        tags$div(# title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) fittata sui dati empirici",
+                          title = "La curva approssimante è calcolata tramite un Generalized Additive Model (GAM) fittato sui dati empirici",
                           checkboxGroupButtons(
                             inputId = "element_plot_check",
                             label = "Seleziona gli elementi che vuoi visualizzare",
@@ -246,8 +265,8 @@ ui <- dashboardPage(
                         ),
                         hidden(
                             sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
-                                        min = .1, max = 2, step = .1,
-                                        value = .8
+                                        min = 0, max = 5, step = .01,
+                                        value = 2
                             )
                         )
                         )
@@ -279,10 +298,12 @@ ui <- dashboardPage(
                         tabsetPanel(
                           tabPanel("Casi cumulati",
                                    plotly::plotlyOutput("plot_cases_tot",
-                                                        width = "100%", height = "100%")),
+                                                        width = "100%", height = "100%") %>% 
+                                     withSpinner()),
                           tabPanel("Casi giornalieri",
                                   plotly::plotlyOutput("plot_cases_new",
-                                                       width = "100%", height = "100%"))
+                                                       width = "100%", height = "100%") %>% 
+                                    withSpinner())
                         )
                     )
                   # )
@@ -354,10 +375,63 @@ ui <- dashboardPage(
 # server <- function(input, output, session){}
 server <- function(input, output, session){
   
+  # Filter selected provinces
   covid_prov_filtered <- reactive({
     covid_prov %>% 
       filter(denominazione_provincia %in% input$province_displayed)
   })
+  
+  
+  # Compute model for total data
+  covid_prov_fitted_tot <- reactive({
+    covid_prov %>% 
+      filter(denominazione_provincia %in% input$province_displayed) %>% 
+      group_by(denominazione_provincia) %>%
+      nest() %>%
+      mutate(model = map(data, function(x){model_tot(x, sp = input$span_slider)})) %>%
+      mutate(
+        data = map2(data, model,
+                    function(data, model){
+                      pred <- predict(object = model, newdata = data, type = "response", se.fit = T)
+                      data %>% 
+                        mutate(fit = pred$fit,
+                               se = pred$se.fit,
+                               lower = fit - 2 * se,
+                               upper = fit + 2 * se,
+                               fit_onpop = fit / popolazione * 1e5,
+                               lower_onpop = lower / popolazione * 1e5,
+                               upper_onpop = upper / popolazione * 1e5)
+                    }
+        )
+      ) %>%
+      unnest(data)
+  })
+  
+  # Compute model for new data
+  covid_prov_fitted_new <- reactive({
+    covid_prov %>% 
+      filter(denominazione_provincia %in% input$province_displayed) %>% 
+      group_by(denominazione_provincia) %>%
+      nest() %>%
+      mutate(model = map(data, function(x){model_new(x, sp = input$span_slider)})) %>%
+      mutate(
+        data = map2(data, model,
+                    function(data, model){
+                      pred <- predict(object = model, newdata = data, type = "response", se.fit = T)
+                      data %>% 
+                        mutate(fit = pred$fit,
+                               se = pred$se.fit,
+                               lower = fit - 2 * se,
+                               upper = fit + 2 * se,
+                               fit_onpop = fit / popolazione * 1e5,
+                               lower_onpop = lower / popolazione * 1e5,
+                               upper_onpop = upper / popolazione * 1e5)
+                    }
+        )
+      ) %>%
+      unnest(data)
+  })
+    
   
   
   # Plot total cases ####
@@ -412,11 +486,43 @@ server <- function(input, output, session){
       }
       
       if("Curva approssimante" %in% input$element_plot_check){
-        p <- p +
-          geom_smooth(method = "loess",
-                      formula = "y ~ x",
-                      se = input$showSE_check,
-                      span = input$span_slider)
+        
+        if(input$rescalePop_check){
+          p <- p +
+            geom_line(data = covid_prov_fitted_tot(),
+                      aes(y = fit_onpop),
+                      size = 1)
+          if(input$showSE_check){
+            p <- p + geom_ribbon(data = covid_prov_fitted_tot(),
+                            aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = denominazione_provincia),
+                            # fill = "grey70",
+                            color = NA,
+                            alpha = .4,
+                            show.legend = FALSE)
+          }
+          
+        } else {
+          p <- p +
+            geom_line(data = covid_prov_fitted_tot(),
+                      aes(y = fit),
+                      size = 1)
+          if(input$showSE_check){
+            p <- p +
+              geom_ribbon(data = covid_prov_fitted_tot(),
+                          aes(ymin = lower, ymax = upper, y = fit, fill = denominazione_provincia),
+                          color = NA,
+                          alpha = .4,
+                          show.legend = FALSE)
+          }
+        }
+        
+        # # Loess
+        # p <- p +
+        #   geom_smooth(method = "loess",
+        #               formula = "y ~ x",
+        #               se = input$showSE_check,
+        #               span = input$span_slider)
+      
       }
       
     }
@@ -478,11 +584,43 @@ server <- function(input, output, session){
       }
       
       if("Curva approssimante" %in% input$element_plot_check){
-        p <- p +
-          geom_smooth(method = "loess",
-                      formula = "y ~ x",
-                      se = input$showSE_check,
-                      span = input$span_slider)
+        
+        if(input$rescalePop_check){
+          p <- p +
+            geom_line(data = covid_prov_fitted_new(),
+                      aes(y = fit_onpop),
+                      size = 1)
+          if(input$showSE_check){
+            p <- p + geom_ribbon(data = covid_prov_fitted_new(),
+                                 aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = denominazione_provincia),
+                                 # fill = "grey70",
+                                 color = NA,
+                                 alpha = .4,
+                                 show.legend = FALSE)
+          }
+          
+        } else {
+          p <- p +
+            geom_line(data = covid_prov_fitted_new(),
+                      aes(y = fit),
+                      size = 1)
+          if(input$showSE_check){
+            p <- p +
+              geom_ribbon(data = covid_prov_fitted_new(),
+                          aes(ymin = lower, ymax = upper, y = fit, fill = denominazione_provincia),
+                          color = NA,
+                          alpha = .4,
+                          show.legend = FALSE)
+          }
+        }
+        
+        # # Loess
+        # p <- p +
+        #   geom_smooth(method = "loess",
+        #               formula = "y ~ x",
+        #               se = input$showSE_check,
+        #               span = input$span_slider)
+
       }
     
     }
