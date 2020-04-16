@@ -31,12 +31,11 @@ library(mgcv)             # For GAMs
 # theme_set(dark_theme_gray())
 theme_set(theme_bw())
 
-# Prepare data ####
+# Prepare provinces data ####
 
 # Read data
-url <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv")
-# url <- "www/data/dpc-covid19-ita-province.csv"
-covid_prov <- read_csv(url, na = "")
+url_prov <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv")
+covid_prov <- read_csv(url_prov, na = "")
 
 # Remove summary rows
 covid_prov <- covid_prov %>% 
@@ -45,8 +44,11 @@ covid_prov <- covid_prov %>%
 
 # Mutate date-time into date
 covid_prov <- covid_prov %>% 
-  mutate(data = as.Date(data))
-
+  mutate(data = as.Date(data)) %>% 
+  # fix the name of the province Trientino Alto Adige
+  mutate(denominazione_regione = ifelse(codice_regione == "04",
+                                        "Trentino Alto Adige",
+                                        denominazione_regione))
 
 # Create daily cases
 covid_prov <- covid_prov %>% 
@@ -64,6 +66,8 @@ covid_prov <- covid_prov %>%
 # Data on population
 pop_prov <- read_csv2("www/data/pop_prov_italia.csv",
                       na = "")
+
+# TO DO: Unisci Trento e Bolzano
 
 covid_prov <- covid_prov %>% 
   left_join(pop_prov %>% 
@@ -106,6 +110,144 @@ province_init <- covid_prov %>%
 regioni <- sort(unique(covid_prov$denominazione_regione))
 
 
+# Prepare regions data ####
+
+# Read data
+url_reg <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni.csv")
+covid_reg <- read_csv(url_reg, na = "")
+
+# Mutate date-time into date
+covid_reg <- covid_reg %>% 
+  mutate(data = as.Date(data)) %>% 
+  select(data, stato, codice_regione, denominazione_regione, lat, long,
+         osped_tot = totale_ospedalizzati,
+         deced_tot = deceduti,
+         casi_tot = totale_casi) %>% 
+  # fix the name of the province Trientino Alto Adige
+  mutate(denominazione_regione = ifelse(codice_regione == "04",
+                                        "Trentino Alto Adige",
+                                        denominazione_regione)) %>% 
+  group_by(data, stato, codice_regione, denominazione_regione) %>% 
+  summarize(osped_tot = sum(osped_tot),
+            deced_tot = sum(osped_tot),
+            casi_tot = sum(casi_tot)) %>% 
+  ungroup()
+
+
+# Create national data
+covid_ita <- covid_reg %>% 
+  group_by(data, stato) %>% 
+  summarize(osped_tot = sum(osped_tot),
+            deced_tot = sum(deced_tot),
+            casi_tot = sum(casi_tot)) %>% 
+  ungroup()
+
+
+# Create daily cases for regional data
+covid_reg <- covid_reg %>% 
+  left_join(covid_reg %>% 
+              select(data, codice_regione,
+                     osped_tot_previous_day = osped_tot,
+                     deced_tot_previous_day = deced_tot,
+                     casi_tot_previous_day = casi_tot) %>% 
+              mutate(data = data + 1),
+            by = c("data", "codice_regione")) %>% 
+  mutate(osped_tot_previous_day = ifelse(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
+         deced_tot_previous_day = ifelse(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
+         casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day)) %>% 
+  mutate(osped_new = osped_tot - osped_tot_previous_day,
+         deced_new = deced_tot - deced_tot_previous_day,
+         casi_new = casi_tot - casi_tot_previous_day) %>%
+  # Fix the problem of negative data in daily cases
+  mutate(osped_new = ifelse(osped_new < 0, 0, osped_new),
+         deced_new = ifelse(deced_new < 0, 0, deced_new),
+         casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
+  select(-osped_tot_previous_day, -deced_tot_previous_day, -casi_tot_previous_day)
+
+
+covid_reg <- covid_reg %>% 
+  left_join(covid_prov %>% 
+              select(codice_regione, codice_provincia, popolazione) %>% 
+              unique() %>% 
+              group_by(codice_regione) %>% 
+              summarize(popolazione = sum(popolazione)) %>% 
+              ungroup(),
+            by = "codice_regione") %>% 
+  mutate(
+    osped_tot_onpop = osped_tot / popolazione * 1e5,
+    deced_tot_onpop = deced_tot / popolazione * 1e5,
+    casi_tot_onpop = casi_tot / popolazione * 1e5,
+    osped_new_onpop = osped_new / popolazione * 1e5,
+    deced_new_onpop = deced_new / popolazione * 1e5,
+    casi_new_onpop = casi_new / popolazione * 1e5
+  ) %>% 
+  # Add tooltip
+  mutate(popup = str_c("<b>", denominazione_regione, "</b>",
+                       "<br>Data: ", data,
+                       "<br>Totale casi: ", casi_tot,
+                       "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
+                       "<br>Totale decessi: ", deced_tot,
+                       "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
+                       "<br>Nuovi casi: ", casi_new,
+                       "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000",
+                       "<br>Nuovi decessi: ", deced_new,
+                       "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"))
+
+
+
+# Create daily cases for national data
+covid_ita <- covid_ita %>% 
+  left_join(covid_ita %>% 
+              select(data,
+                     osped_tot_previous_day = osped_tot,
+                     deced_tot_previous_day = deced_tot,
+                     casi_tot_previous_day = casi_tot) %>% 
+              mutate(data = data + 1),
+            by = "data") %>% 
+  mutate(osped_tot_previous_day = ifelse(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
+         deced_tot_previous_day = ifelse(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
+         casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day)) %>% 
+  mutate(osped_new = osped_tot - osped_tot_previous_day,
+         deced_new = deced_tot - deced_tot_previous_day,
+         casi_new = casi_tot - casi_tot_previous_day) %>%
+  # Fix the problem of negative data in daily cases
+  mutate(osped_new = ifelse(osped_new < 0, 0, osped_new),
+         deced_new = ifelse(deced_new < 0, 0, deced_new),
+         casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
+  select(-osped_tot_previous_day, -deced_tot_previous_day, -casi_tot_previous_day)
+
+
+
+
+covid_ita <- covid_ita %>% 
+  mutate(popolazione = sum(pop_prov$popolazione)) %>% 
+  mutate(
+    osped_tot_onpop = osped_tot / popolazione * 1e5,
+    deced_tot_onpop = deced_tot / popolazione * 1e5,
+    casi_tot_onpop = casi_tot / popolazione * 1e5,
+    osped_new_onpop = osped_new / popolazione * 1e5,
+    deced_new_onpop = deced_new / popolazione * 1e5,
+    casi_new_onpop = casi_new / popolazione * 1e5
+  ) %>% 
+  # Add tooltip
+  mutate(popup = str_c("<b>", "Italia", "</b>",
+                       "<br>Data: ", data,
+                       "<br>Totale casi: ", casi_tot,
+                       "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
+                       "<br>Totale decessi: ", deced_tot,
+                       "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
+                       "<br>Nuovi casi: ", casi_new,
+                       "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000",
+                       "<br>Nuovi decessi: ", deced_new,
+                       "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"))
+
+
+
+
+
+# Prepare map data ####
+
+
 # # Read map data
 # map_prov <- readOGR(dsn = "maps_data/Limiti01012020_g/ProvCM01012020_g",
 #                     layer = "ProvCM01012020_g_WGS84",
@@ -124,17 +266,16 @@ regioni <- sort(unique(covid_prov$denominazione_regione))
 load("www/data/map_prov_simply.RData")
 
 
-
 # Ad info on covid19
 map_prov_data <- map_prov@data
 
 
-# Create funcion for maximum value on map color scale
-ceil10 <- function(x){
-  10^ceiling(log10(max(x)))
-}
 
-# Define models for trend approximations
+
+
+
+
+# Define models for trend approximations ####
 model_new <- function(df, sp) {
   gam(formula = casi_new ~ s(as.numeric(data), k = 10) + offset(log(popolazione)),
       sp = sp,
@@ -147,6 +288,18 @@ model_tot <- function(df, sp) {
       data = df,
       family = poisson(link = "log"))
 }
+
+# Create funcion for maximum value on map color scale
+ceil10 <- function(x){
+  10^ceiling(log10(max(x)))
+}
+
+
+# Prova
+choosen_dataset <- "covid_prov"
+selecting_variable <- "denominazione_provincia"
+selected_values <- "input$province_displayed"
+# selected_variable_label <- "Provincia"
 
 
 # User interface ####
@@ -184,29 +337,40 @@ ui <- dashboardPage(
                       # inputPanel(
                       wellPanel(
                         # verticalLayout(
-                            pickerInput(
-                              inputId = "province_displayed",
-                              label = "Seleziona province", 
-                              # choices = province,
-                              choices = province_list,
-                              selected = province_init,
-                              multiple = TRUE,
-                              options = list(
-                                `live-search` = TRUE)),
-                            pickerInput(
-                              inputId = "regione_displayed",
-                              label = "Seleziona regione", 
-                              choices = regioni,
-                              # selected = "",
-                              multiple = TRUE,
-                              options = list(
-                                `live-search` = TRUE)
-                            ),
-                            # tags$br(),
-                            actionButton("deselect_button",
-                                         "Deseleziona tutte le province"),
-                            actionButton("select_top_n_button",
-                                         "Seleziona le prime n province")#,
+                        radioGroupButtons(
+                          inputId = "regionalDetail_radio",
+                          label = "Seleziona il dettaglio",
+                          choices = c("Italia", "Regioni", "Province"),
+                          individual = TRUE,
+                          checkIcon = list(
+                            yes = tags$i(class = "fa fa-circle", 
+                                         style = "color: steelblue"),
+                            no = tags$i(class = "fa fa-circle-o", 
+                                        style = "color: steelblue"))
+                        ),
+                        pickerInput(
+                          inputId = "province_displayed",
+                          label = "Seleziona province", 
+                          # choices = province,
+                          choices = province_list,
+                          selected = province_init,
+                          multiple = TRUE,
+                          options = list(
+                            `live-search` = TRUE)),
+                        pickerInput(
+                          inputId = "regioni_displayed",
+                          label = "Seleziona regione", 
+                          choices = regioni,
+                          # selected = "",
+                          multiple = TRUE,
+                          options = list(
+                            `live-search` = TRUE)
+                        ),
+                        # tags$br(),
+                        actionButton("deselect_button",
+                                     "Deseleziona tutte le province"),
+                        actionButton("select_top_n_button",
+                                     "Seleziona le prime n province")#,
                         # materialSwitch("multiple_region_switch",
                         #                "Seleziona più regioni",
                         #                value = TRUE,
@@ -375,18 +539,63 @@ ui <- dashboardPage(
 # server <- function(input, output, session){}
 server <- function(input, output, session){
   
+  
+  # Create reactive components ####
+  
+  choosen_dataset <- reactive({
+    if(input$regionalDetail_radio == "Italia"){
+      covid_ita
+    } else if(input$regionalDetail_radio == "Regioni") {
+      covid_reg
+    } else {
+      covid_prov
+    }
+  })
+  
+  selecting_variable <- reactive({
+    if(input$regionalDetail_radio == "Italia"){
+      "stato"
+    } else if(input$regionalDetail_radio == "Regioni") {
+      "denominazione_regione"
+    } else {
+      "denominazione_provincia"
+    }
+  })
+  
+  selected_values <- reactive({
+    if(input$regionalDetail_radio == "Italia"){
+      "ITA"
+    } else if(input$regionalDetail_radio == "Regioni"){
+      input$regioni_displayed
+    } else {
+      input$province_displayed
+    }
+  })
+  
+  selected_variable_label <- reactive({
+    if(input$regionalDetail_radio == "Italia"){
+      "Nazione"
+    } else if(input$regionalDetail_radio == "Regioni") {
+      "Regione"
+    } else {
+      "Provincia"
+    }
+  })
+  
   # Filter selected provinces
-  covid_prov_filtered <- reactive({
-    covid_prov %>% 
-      filter(denominazione_provincia %in% input$province_displayed)
+  covid_dataset_filtered <- reactive({
+    # covid_prov %>%
+    #   filter(denominazione_provincia %in% input$province_displayed)
+    
+    choosen_dataset() %>% 
+      filter(get(selecting_variable()) %in% selected_values())
   })
   
   
   # Compute model for total data
-  covid_prov_fitted_tot <- reactive({
-    covid_prov %>% 
-      filter(denominazione_provincia %in% input$province_displayed) %>% 
-      group_by(denominazione_provincia) %>%
+  covid_fitted_tot <- reactive({
+    covid_dataset_filtered() %>% 
+      group_by(get(selecting_variable())) %>%
       nest() %>%
       mutate(model = map(data, function(x){model_tot(x, sp = input$span_slider)})) %>%
       mutate(
@@ -408,10 +617,9 @@ server <- function(input, output, session){
   })
   
   # Compute model for new data
-  covid_prov_fitted_new <- reactive({
-    covid_prov %>% 
-      filter(denominazione_provincia %in% input$province_displayed) %>% 
-      group_by(denominazione_provincia) %>%
+  covid_fitted_new <- reactive({
+    covid_dataset_filtered() %>% 
+      group_by(get(selecting_variable())) %>%
       nest() %>%
       mutate(model = map(data, function(x){model_new(x, sp = input$span_slider)})) %>%
       mutate(
@@ -437,41 +645,41 @@ server <- function(input, output, session){
   # Plot total cases ####
   plot_cases_tot <- reactive({
     if(input$rescalePop_check){
-      covid_prov_filtered() %>% 
+      covid_dataset_filtered() %>% 
         ggplot(aes(x = data, y = casi_tot_onpop,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia)) +
-        labs(color = "Provincia",
+                   group = get(selecting_variable()))) +
+        labs(color = selected_variable_label(),
              y = "Casi ogni 100 000 abitanti")
     } else {
-      covid_prov_filtered() %>% 
+      covid_dataset_filtered() %>% 
         ggplot(aes(x = data, y = casi_tot,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia)) +
-        labs(color = "Provincia",
+                   group = get(selecting_variable()))) +
+        labs(color = selected_variable_label(),
              y = "Casi")
     }
   })
   
   output$plot_cases_tot <- plotly::renderPlotly({
     
-    if(is.null(input$province_displayed)){
+    if(is.null(selected_values())){
       p <- tibble(data = 0, casi_tot = 0,
                   denominazione_provincia = "", popup = "") %>% 
         ggplot(aes(x = data, y = casi_tot,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia))
+                   group = get(selecting_variable())))
       
       if(input$rescalePop_check){
         p <- p +
-          labs(color = "Provincia",
+          labs(color = selected_variable_label(),
                y = "Casi ogni 100 000 abitanti")
       } else {
         p <- p +
-          labs(color = "Provincia",
+          labs(color = selected_variable_label(),
                y = "Casi")
       }
       
@@ -489,12 +697,12 @@ server <- function(input, output, session){
         
         if(input$rescalePop_check){
           p <- p +
-            geom_line(data = covid_prov_fitted_tot(),
+            geom_line(data = covid_fitted_tot(),
                       aes(y = fit_onpop),
                       size = 1)
           if(input$showSE_check){
-            p <- p + geom_ribbon(data = covid_prov_fitted_tot(),
-                            aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = denominazione_provincia),
+            p <- p + geom_ribbon(data = covid_fitted_tot(),
+                            aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = get(selecting_variable())),
                             # fill = "grey70",
                             color = NA,
                             alpha = .4,
@@ -503,13 +711,13 @@ server <- function(input, output, session){
           
         } else {
           p <- p +
-            geom_line(data = covid_prov_fitted_tot(),
+            geom_line(data = covid_fitted_tot(),
                       aes(y = fit),
                       size = 1)
           if(input$showSE_check){
             p <- p +
-              geom_ribbon(data = covid_prov_fitted_tot(),
-                          aes(ymin = lower, ymax = upper, y = fit, fill = denominazione_provincia),
+              geom_ribbon(data = covid_fitted_tot(),
+                          aes(ymin = lower, ymax = upper, y = fit, fill = get(selecting_variable())),
                           color = NA,
                           alpha = .4,
                           show.legend = FALSE)
@@ -535,20 +743,20 @@ server <- function(input, output, session){
   # Plot new cases ####
   plot_cases_new <- reactive({
     if(input$rescalePop_check){
-      covid_prov_filtered() %>% 
+      covid_dataset_filtered() %>% 
         ggplot(aes(x = data, y = casi_new_onpop,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia)) +
-        labs(color = "Provincia",
+                   group = get(selecting_variable()))) +
+        labs(color = selected_variable_label(),
              y = "Casi ogni 100 000 abitanti")
     } else {
-      covid_prov_filtered() %>% 
+      covid_dataset_filtered() %>% 
         ggplot(aes(x = data, y = casi_new,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia)) +
-        labs(color = "Provincia",
+                   group = get(selecting_variable()))) +
+        labs(color = selected_variable_label(),
              y = "Casi")
     }
   })
@@ -556,21 +764,21 @@ server <- function(input, output, session){
   
   output$plot_cases_new <- plotly::renderPlotly({
     
-    if(is.null(input$province_displayed)){
+    if(is.null(selected_values())){
       p <- tibble(data = 0, casi_tot = 0,
-                  denominazione_provincia = "", popup = "") %>% 
+                  denominazione_province = "", popup = "") %>% 
         ggplot(aes(x = data, y = casi_tot,
-                   color = denominazione_provincia,
+                   color = get(selecting_variable()),
                    text = popup,
-                   group = denominazione_provincia))
+                   group = get(selecting_variable())))
       
       if(input$rescalePop_check){
         p <- p +
-          labs(color = "Provincia",
+          labs(color = selected_variable_label(),
                y = "Casi ogni 100 000 abitanti")
       } else {
         p <- p +
-          labs(color = "Provincia",
+          labs(color = selected_variable_label(),
                y = "Casi")
       }
     } else {
@@ -587,12 +795,12 @@ server <- function(input, output, session){
         
         if(input$rescalePop_check){
           p <- p +
-            geom_line(data = covid_prov_fitted_new(),
+            geom_line(data = covid_fitted_new(),
                       aes(y = fit_onpop),
                       size = 1)
           if(input$showSE_check){
-            p <- p + geom_ribbon(data = covid_prov_fitted_new(),
-                                 aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = denominazione_provincia),
+            p <- p + geom_ribbon(data = covid_fitted_new(),
+                                 aes(ymin = lower_onpop, ymax = upper_onpop, y = fit_onpop, fill = get(selecting_variable())),
                                  # fill = "grey70",
                                  color = NA,
                                  alpha = .4,
@@ -601,13 +809,13 @@ server <- function(input, output, session){
           
         } else {
           p <- p +
-            geom_line(data = covid_prov_fitted_new(),
+            geom_line(data = covid_fitted_new(),
                       aes(y = fit),
                       size = 1)
           if(input$showSE_check){
             p <- p +
-              geom_ribbon(data = covid_prov_fitted_new(),
-                          aes(ymin = lower, ymax = upper, y = fit, fill = denominazione_provincia),
+              geom_ribbon(data = covid_fitted_new(),
+                          aes(ymin = lower, ymax = upper, y = fit, fill = get(selecting_variable())),
                           color = NA,
                           alpha = .4,
                           show.legend = FALSE)
@@ -629,11 +837,11 @@ server <- function(input, output, session){
     
   })
   
-  
+
   # Choose region ####
-  observeEvent(input$regione_displayed, {
+  observeEvent(input$regioni_displayed, {
     province_init <- covid_prov %>% 
-      filter(denominazione_regione %in% input$regione_displayed) %>% 
+      filter(denominazione_regione %in% input$regioni_displayed) %>% 
       .$denominazione_provincia %>% 
       unique() %>% 
       sort()
@@ -646,7 +854,7 @@ server <- function(input, output, session){
   
   # Deselect everything ####
   observeEvent(input$deselect_button, {
-    updatePickerInput(session = session, inputId = "regione_displayed",
+    updatePickerInput(session = session, inputId = "regioni_displayed",
                       selected = "")
     updatePickerInput(session = session, inputId = "province_displayed",
                       selected = "")
@@ -656,8 +864,8 @@ server <- function(input, output, session){
   # Select one region at the time ####
   # print(input$multiple_region_switch)
   # observeEvent(input$multiple_region_switch, {
-  #   updatePickerInput(session = session, inputId = "regione_displayed",
-  #                     choices = input$regione_displayed[1],
+  #   updatePickerInput(session = session, inputId = "regioni_displayed",
+  #                     choices = input$regioni_displayed[1],
   #                     multiple = input$multiple_region_switch)
   #   print(input$province_displayed)
   # }, ignoreInit = TRUE)
@@ -711,7 +919,7 @@ server <- function(input, output, session){
         .$denominazione_provincia
     }
     
-    updatePickerInput(session = session, inputId = "regione_displayed",
+    updatePickerInput(session = session, inputId = "regioni_displayed",
                       selected = "")
     updatePickerInput(session = session, inputId = "province_displayed",
                       selected = province_toSelect)
@@ -740,19 +948,69 @@ server <- function(input, output, session){
   })
   
   
-  # Create table ####
-  output$table_provinces <- DT::renderDataTable({
-    covid_prov %>% 
-      select(data,
-             denominazione_regione,
-             denominazione_provincia,
-             casi_tot, casi_tot_onpop,
-             casi_new, casi_new_onpop
-             ) %>% 
-      mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
-             casi_new_onpop = round(casi_new_onpop, 2)) %>% 
-      arrange(desc(data), desc(casi_tot))
+  # Select regional detail ####
+  observeEvent(input$regionalDetail_radio, {
+    
+    if(input$regionalDetail_radio == "Italia"){
+      
+      shinyjs::hide("province_displayed", anim = T)
+      shinyjs::hide("regioni_displayed", anim = T)
+      shinyjs::hide("deselect_button", anim = T)
+      shinyjs::hide("select_top_n_button", anim = T)
+      
+      # choosen_dataset <- "covid_ita"
+      # selecting_variable <- "stato"
+      # selected_values <- "ITA"
+      # selected_variable_label <- "Nazione"
+      
+    } else if (input$regionalDetail_radio == "Regioni") {
+      
+      shinyjs::hide("province_displayed", anim = T)
+      shinyjs::show("regioni_displayed", anim = T)
+      shinyjs::show("deselect_button", anim = T)
+      shinyjs::show("select_top_n_button", anim = T)
+      
+      # choosen_dataset <- "covid_reg"
+      # selecting_variable <- "denominazione_regione"
+      # selected_values <- "input$regioni_displayed"
+      # selected_variable_label <- "Regione"
+      
+      if(is.null(input$regioni_displayed)){
+        updatePickerInput(session = session, inputId = "regioni_displayed",
+                          selected = "Lombardia")
+      }
+      
+      
+    } else {
+      
+      shinyjs::show("province_displayed", anim = T)
+      shinyjs::show("regioni_displayed", anim = T)
+      shinyjs::show("deselect_button", anim = T)
+      shinyjs::show("select_top_n_button", anim = T)
+      
+      # choosen_dataset <- "covid_prov"
+      # selecting_variable <- "denominazione_provincia"
+      # selected_values <- "input$province_displayed"
+      # selected_variable_label <- "Provincia"
+      
+    }
   })
+  
+  
+  
+  # # Create table ####
+  # output$table_provinces <- DT::renderDataTable({
+  #   covid_prov %>% 
+  #     select(data,
+  #            denominazione_regione,
+  #            denominazione_provincia,
+  #            casi_tot, casi_tot_onpop,
+  #            casi_new, casi_new_onpop
+  #            ) %>% 
+  #     mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
+  #            casi_new_onpop = round(casi_new_onpop, 2)) %>% 
+  #     arrange(desc(data), desc(casi_tot))
+  # })
   
   
   # Create leaflet map ####
@@ -896,8 +1154,6 @@ server <- function(input, output, session){
                       popup = ~popup)
       }
     }
-    
-    
     
   })
   
