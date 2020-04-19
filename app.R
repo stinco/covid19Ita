@@ -46,7 +46,7 @@ covid_prov <- covid_prov %>%
 covid_prov <- covid_prov %>% 
   mutate(data = as.Date(data)) %>% 
   # fix the name of the province Trientino Alto Adige
-  mutate(denominazione_regione = ifelse(codice_regione == "04",
+  mutate(denominazione_regione = if_else(codice_regione == "04",
                                         "Trentino Alto Adige",
                                         denominazione_regione))
 
@@ -56,10 +56,10 @@ covid_prov <- covid_prov %>%
               select(data, sigla_provincia, casi_tot_previous_day = casi_tot) %>% 
               mutate(data = data + 1),
             by = c("data", "sigla_provincia")) %>% 
-  mutate(casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
+  mutate(casi_tot_previous_day = if_else(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
          casi_new = casi_tot - casi_tot_previous_day) %>%
   # Fix the problem of negative data in daily cases
-  mutate(casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
+  mutate(casi_new = if_else(casi_new < 0, 0, casi_new)) %>% 
   select(-casi_tot_previous_day)
 
 
@@ -77,7 +77,7 @@ covid_prov <- covid_prov %>%
          casi_new_onpop = casi_new / popolazione * 1e5)
 
 covid_prov <- covid_prov %>% 
-  mutate(popup = str_c("<b>", denominazione_provincia, "</b>",
+  mutate(popup_casi = str_c("<b>", denominazione_provincia, "</b>",
                        "<br>Data: ", data,
                        "<br>Totale casi: ", casi_tot,
                        "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
@@ -120,26 +120,33 @@ covid_reg <- read_csv(url_reg, na = "")
 covid_reg <- covid_reg %>% 
   mutate(data = as.Date(data)) %>% 
   select(data, stato, codice_regione, denominazione_regione, lat, long,
-         osped_tot = totale_ospedalizzati,
+         casi_tot = totale_casi,
          deced_tot = deceduti,
-         casi_tot = totale_casi) %>% 
+         tamponi_tot = tamponi,
+         positivi_tot = totale_positivi,
+         osped_tot = totale_ospedalizzati
+         ) %>% 
   # fix the name of the province Trientino Alto Adige
-  mutate(denominazione_regione = ifelse(codice_regione == "04",
+  mutate(denominazione_regione = if_else(codice_regione == "04",
                                         "Trentino Alto Adige",
                                         denominazione_regione)) %>% 
   group_by(data, stato, codice_regione, denominazione_regione) %>% 
-  summarize(osped_tot = sum(osped_tot),
-            deced_tot = sum(osped_tot),
-            casi_tot = sum(casi_tot)) %>% 
+  summarize(casi_tot = sum(casi_tot),
+            deced_tot = sum(deced_tot),
+            tamponi_tot = sum(tamponi_tot),
+            positivi_tot = sum(positivi_tot),
+            osped_tot = sum(osped_tot)) %>% 
   ungroup()
 
 
 # Create national data
 covid_ita <- covid_reg %>% 
   group_by(data, stato) %>% 
-  summarize(osped_tot = sum(osped_tot),
+  summarize(casi_tot = sum(casi_tot),
             deced_tot = sum(deced_tot),
-            casi_tot = sum(casi_tot)) %>% 
+            tamponi_tot = sum(tamponi_tot),
+            positivi_tot = sum(positivi_tot),
+            osped_tot = sum(osped_tot)) %>%  
   ungroup()
 
 
@@ -147,22 +154,29 @@ covid_ita <- covid_reg %>%
 covid_reg <- covid_reg %>% 
   left_join(covid_reg %>% 
               select(data, codice_regione,
-                     osped_tot_previous_day = osped_tot,
+                     casi_tot_previous_day = casi_tot,
                      deced_tot_previous_day = deced_tot,
-                     casi_tot_previous_day = casi_tot) %>% 
+                     tamponi_tot_previous_day = tamponi_tot,
+                     positivi_tot_previous_day = positivi_tot,
+                     osped_tot_previous_day = osped_tot) %>% 
               mutate(data = data + 1),
             by = c("data", "codice_regione")) %>% 
-  mutate(osped_tot_previous_day = ifelse(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
-         deced_tot_previous_day = ifelse(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
-         casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day)) %>% 
-  mutate(osped_new = osped_tot - osped_tot_previous_day,
+  mutate(casi_tot_previous_day = if_else(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
+         deced_tot_previous_day = if_else(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
+         tamponi_tot_previous_day = if_else(is.na(tamponi_tot_previous_day), 0, tamponi_tot_previous_day),
+         positivi_tot_previous_day = if_else(is.na(positivi_tot_previous_day), 0, positivi_tot_previous_day),
+         osped_tot_previous_day = if_else(is.na(osped_tot_previous_day), 0, osped_tot_previous_day)) %>% 
+  mutate(casi_new = casi_tot - casi_tot_previous_day,
          deced_new = deced_tot - deced_tot_previous_day,
-         casi_new = casi_tot - casi_tot_previous_day) %>%
+         tamponi_new = tamponi_tot - tamponi_tot_previous_day,
+         positivi_new = positivi_tot - positivi_tot_previous_day,
+         osped_new = osped_tot - osped_tot_previous_day) %>%
   # Fix the problem of negative data in daily cases
-  mutate(osped_new = ifelse(osped_new < 0, 0, osped_new),
-         deced_new = ifelse(deced_new < 0, 0, deced_new),
-         casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
-  select(-osped_tot_previous_day, -deced_tot_previous_day, -casi_tot_previous_day)
+  mutate(casi_new = if_else(casi_new < 0, 0, casi_new),
+         deced_new = if_else(deced_new < 0, 0, deced_new),
+         tamponi_new = if_else(tamponi_new < 0, 0, tamponi_new)
+         ) %>% 
+  select(-matches("_previous_day"))
 
 
 covid_reg <- covid_reg %>% 
@@ -174,72 +188,119 @@ covid_reg <- covid_reg %>%
               ungroup(),
             by = "codice_regione") %>% 
   mutate(
-    osped_tot_onpop = osped_tot / popolazione * 1e5,
-    deced_tot_onpop = deced_tot / popolazione * 1e5,
     casi_tot_onpop = casi_tot / popolazione * 1e5,
-    osped_new_onpop = osped_new / popolazione * 1e5,
+    deced_tot_onpop = deced_tot / popolazione * 1e5,
+    tamponi_tot_onpop = tamponi_tot / popolazione * 1e5,
+    positivi_tot_onpop = positivi_tot / popolazione * 1e5,
+    osped_tot_onpop = osped_tot / popolazione * 1e5,
+    casi_new_onpop = casi_new / popolazione * 1e5,
     deced_new_onpop = deced_new / popolazione * 1e5,
-    casi_new_onpop = casi_new / popolazione * 1e5
+    tamponi_new_onpop = tamponi_new / popolazione * 1e5,
+    positivi_new_onpop = positivi_new / popolazione * 1e5,
+    osped_new_onpop = osped_new / popolazione * 1e5
   ) %>% 
   # Add tooltip
-  mutate(popup = str_c("<b>", denominazione_regione, "</b>",
-                       "<br>Data: ", data,
-                       "<br>Totale casi: ", casi_tot,
-                       "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
-                       "<br>Totale decessi: ", deced_tot,
-                       "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
-                       "<br>Nuovi casi: ", casi_new,
-                       "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000",
-                       "<br>Nuovi decessi: ", deced_new,
-                       "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"))
-
+  mutate(popup_casi = str_c("<b>", denominazione_regione, "</b>",
+                            "<br>Data: ", data,
+                            "<br>Totale casi: ", casi_tot,
+                            "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
+                            "<br>Nuovi casi: ", casi_new,
+                            "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000"),
+         popup_deced = str_c("<b>", denominazione_regione, "</b>",
+                             "<br>Data: ", data,
+                             "<br>Totale decessi: ", deced_tot,
+                             "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
+                             "<br>Nuovi decessi: ", deced_new,
+                             "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"),
+         popup_tamponi = str_c("<b>", denominazione_regione, "</b>",
+                               "<br>Data: ", data,
+                               "<br>Totale tamponi: ", tamponi_tot,
+                               "<br>Totale tamponi / pop: ", round(tamponi_tot_onpop, 2), " /100 000",
+                               "<br>Nuovi tamponi: ", tamponi_new,
+                               "<br>Nuovi tamponi: / pop: ", round(tamponi_new_onpop, 2), " /100 000"),
+         popup_positivi = str_c("<b>", denominazione_regione, "</b>",
+                                "<br>Data: ", data,
+                                "<br>Attualmente positivi: ", positivi_tot,
+                                "<br>Attualmente positivi / pop: ", round(positivi_tot_onpop, 2), " /100 000"),
+         popup_osped = str_c("<b>", denominazione_regione, "</b>",
+                             "<br>Data: ", data,
+                             "<br>Attualmente ospedalizzati: ", osped_tot,
+                             "<br>Attualmente ospedalizzati / pop: ", round(osped_tot_onpop, 2), " /100 000")
+         )
+                            
 
 
 # Create daily cases for national data
 covid_ita <- covid_ita %>% 
   left_join(covid_ita %>% 
               select(data,
-                     osped_tot_previous_day = osped_tot,
+                     casi_tot_previous_day = casi_tot,
                      deced_tot_previous_day = deced_tot,
-                     casi_tot_previous_day = casi_tot) %>% 
+                     tamponi_tot_previous_day = tamponi_tot,
+                     positivi_tot_previous_day = positivi_tot,
+                     osped_tot_previous_day = osped_tot) %>% 
               mutate(data = data + 1),
             by = "data") %>% 
-  mutate(osped_tot_previous_day = ifelse(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
-         deced_tot_previous_day = ifelse(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
-         casi_tot_previous_day = ifelse(is.na(casi_tot_previous_day), 0, casi_tot_previous_day)) %>% 
-  mutate(osped_new = osped_tot - osped_tot_previous_day,
+  mutate(casi_tot_previous_day = if_else(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
+         deced_tot_previous_day = if_else(is.na(deced_tot_previous_day), 0, deced_tot_previous_day),
+         tamponi_tot_previous_day = if_else(is.na(tamponi_tot_previous_day), 0, tamponi_tot_previous_day),
+         positivi_tot_previous_day = if_else(is.na(positivi_tot_previous_day), 0, positivi_tot_previous_day),
+         osped_tot_previous_day = if_else(is.na(osped_tot_previous_day), 0, osped_tot_previous_day)) %>% 
+  mutate(casi_new = casi_tot - casi_tot_previous_day,
          deced_new = deced_tot - deced_tot_previous_day,
-         casi_new = casi_tot - casi_tot_previous_day) %>%
+         tamponi_new = tamponi_tot - tamponi_tot_previous_day,
+         positivi_new = positivi_tot - positivi_tot_previous_day,
+         osped_new = osped_tot - osped_tot_previous_day) %>%
   # Fix the problem of negative data in daily cases
-  mutate(osped_new = ifelse(osped_new < 0, 0, osped_new),
-         deced_new = ifelse(deced_new < 0, 0, deced_new),
-         casi_new = ifelse(casi_new < 0, 0, casi_new)) %>% 
-  select(-osped_tot_previous_day, -deced_tot_previous_day, -casi_tot_previous_day)
-
+  mutate(casi_new = if_else(casi_new < 0, 0, casi_new),
+         deced_new = if_else(deced_new < 0, 0, deced_new),
+         tamponi_new = if_else(tamponi_new < 0, 0, tamponi_new)
+  ) %>% 
+  select(-matches("_previous_day"))
 
 
 
 covid_ita <- covid_ita %>% 
   mutate(popolazione = sum(pop_prov$popolazione)) %>% 
   mutate(
-    osped_tot_onpop = osped_tot / popolazione * 1e5,
-    deced_tot_onpop = deced_tot / popolazione * 1e5,
     casi_tot_onpop = casi_tot / popolazione * 1e5,
-    osped_new_onpop = osped_new / popolazione * 1e5,
+    deced_tot_onpop = deced_tot / popolazione * 1e5,
+    tamponi_tot_onpop = tamponi_tot / popolazione * 1e5,
+    positivi_tot_onpop = positivi_tot / popolazione * 1e5,
+    osped_tot_onpop = osped_tot / popolazione * 1e5,
+    casi_new_onpop = casi_new / popolazione * 1e5,
     deced_new_onpop = deced_new / popolazione * 1e5,
-    casi_new_onpop = casi_new / popolazione * 1e5
+    tamponi_new_onpop = tamponi_new / popolazione * 1e5,
+    positivi_new_onpop = positivi_new / popolazione * 1e5,
+    osped_new_onpop = osped_new / popolazione * 1e5
   ) %>% 
   # Add tooltip
-  mutate(popup = str_c("<b>", "Italia", "</b>",
-                       "<br>Data: ", data,
-                       "<br>Totale casi: ", casi_tot,
-                       "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
-                       "<br>Totale decessi: ", deced_tot,
-                       "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
-                       "<br>Nuovi casi: ", casi_new,
-                       "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000",
-                       "<br>Nuovi decessi: ", deced_new,
-                       "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"))
+  mutate(popup_casi = str_c("<b>", "Italia", "</b>",
+                            "<br>Data: ", data,
+                            "<br>Totale casi: ", casi_tot,
+                            "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
+                            "<br>Nuovi casi: ", casi_new,
+                            "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000"),
+         popup_deced = str_c("<b>", "Italia", "</b>",
+                             "<br>Data: ", data,
+                             "<br>Totale decessi: ", deced_tot,
+                             "<br>Totale decessi / pop: ", round(deced_tot_onpop, 2), " /100 000",
+                             "<br>Nuovi decessi: ", deced_new,
+                             "<br>Nuovi decessi: / pop: ", round(deced_new_onpop, 2), " /100 000"),
+         popup_tamponi = str_c("<b>", "Italia", "</b>",
+                               "<br>Data: ", data,
+                               "<br>Totale tamponi: ", tamponi_tot,
+                               "<br>Totale tamponi / pop: ", round(tamponi_tot_onpop, 2), " /100 000",
+                               "<br>Nuovi tamponi: ", tamponi_new,
+                               "<br>Nuovi tamponi: / pop: ", round(tamponi_new_onpop, 2), " /100 000"),
+         popup_positivi = str_c("<b>", "Italia", "</b>",
+                                "<br>Data: ", data,
+                                "<br>Attualmente positivi: ", positivi_tot,
+                                "<br>Attualmente positivi / pop: ", round(positivi_tot_onpop, 2), " /100 000"),
+         popup_osped = str_c("<b>", "Italia", "</b>",
+                             "<br>Data: ", data,
+                             "<br>Attualmente ospedalizzati: ", osped_tot,
+                             "<br>Attualmente ospedalizzati / pop: ", round(osped_tot_onpop, 2), " /100 000"))
 
 
 
@@ -273,8 +334,8 @@ map_prov_data <- map_prov@data
 
 # Define models for trend approximations ####
 
-model <- function(version, df, sp) {
-  gam(formula = as.formula(str_c("casi_", version, " ~ s(as.numeric(data), k = 30) + offset(log(popolazione))")),
+model <- function(variable, version, df, sp) {
+  gam(formula = as.formula(str_c(variable, "_", version, " ~ s(as.numeric(data), k = 30) + offset(log(popolazione))")),
       sp = sp,
       data = df,
       family = poisson(link = "log"))
@@ -361,8 +422,10 @@ ui <- dashboardPage(
                         selectInput("variable", "Seleziona la grandezza da visualizzare",
                                     choices = c("Casi confermati" = "casi",
                                                 "Decessi" = "deced",
-                                                "Ospedalizzati" = "osped"),
-                                    selected = "Casi confermati"),
+                                                "Tamponi" = "tamponi",
+                                                "Attualmente positivi" = "positivi",
+                                                "Attualmente ospedalizzati" = "osped"),
+                                    selected = "casi"),
                         pickerInput(
                           inputId = "province_displayed",
                           label = "Seleziona province", 
@@ -451,7 +514,7 @@ ui <- dashboardPage(
                         hidden(
                             sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
                                         min = 0, max = 10, step = .01,
-                                        value = 4
+                                        value = 2
                             )
                         )
                         )
@@ -480,12 +543,14 @@ ui <- dashboardPage(
                     ')),
                     box(#fid = "map_container",
                         width = 7,
-                        tabsetPanel(
-                          tabPanel("Casi cumulati",
+                        tabsetPanel(id = "plots_tabPanel",
+                          tabPanel(title = "Casi totali",
+                                   value = "plot_cases_tot_panel",
                                    plotly::plotlyOutput("plot_cases_tot",
                                                         width = "100%", height = "100%") %>% 
                                      withSpinner()),
-                          tabPanel("Casi giornalieri",
+                          tabPanel(title = "Casi giornalieri",
+                                   value = "plot_cases_new_panel",
                                   plotly::plotlyOutput("plot_cases_new",
                                                        width = "100%", height = "100%") %>% 
                                     withSpinner())
@@ -607,7 +672,7 @@ server <- function(input, output, session){
   onpop <- reactive({
     if(input$rescalePop_check){
       "_onpop"
-    } else{
+    } else {
       ""
     }
   })
@@ -615,22 +680,43 @@ server <- function(input, output, session){
   onpop_description <- reactive({
     if(input$rescalePop_check){
       " ogni 100 000 abitanti"
-    } else{
+    } else {
       ""
+    }
+  })
+  
+  variable <- reactive({
+    if(input$regionalDetail_radio == "Provincia"){
+      "casi"
+    } else {
+      input$variable
+    }
+  })
+  
+  variable_description <- reactive({
+    if(input$variable == "casi"){
+      "Casi"
+    } else if(input$variable == "deced"){
+      "Decessi"
+    } else if(input$variable == "tamponi"){
+      "Tamponi"
+    } else if(input$variable == "positivi"){
+      "Attualmente positivi"
+    } else {
+      "Attualmente ospedalizzati"
     }
   })
   
   
   
-  # Filter selected provinces
+  # Dataset ####
   covid_dataset_filtered <- reactive({
-    # covid_prov %>%
-    #   filter(denominazione_provincia %in% input$province_displayed)
-    
     choosen_dataset() %>% 
       filter(get(selecting_detail()) %in% selected_detail())
   })
   
+  
+  # Models ####
   
   # Compute model for total data
   covid_fitted_tot <- reactive({
@@ -638,7 +724,7 @@ server <- function(input, output, session){
       group_by(get(selecting_detail())) %>%
       nest() %>%
       # mutate(model = map(data, function(x){model_tot(x, sp = input$span_slider)})) %>%
-      mutate(model = map(data, function(x){model(version = "tot", x, sp = input$span_slider)})) %>%
+      mutate(model = map(data, function(x){model(variable = variable(), version = "tot", df = x, sp = exp(input$span_slider + .01))})) %>%
       mutate(
         data = map2(data, model,
                     function(data, model){
@@ -663,7 +749,7 @@ server <- function(input, output, session){
       group_by(get(selecting_detail())) %>%
       nest() %>%
       # mutate(model = map(data, function(x){model_new(x, sp = input$span_slider)})) %>%
-      mutate(model = map(data, function(x){model(version = "new", x, sp = input$span_slider)})) %>%
+      mutate(model = map(data, function(x){model(variable = variable(), version = "new", df = x, sp = exp(input$span_slider + .01))})) %>%
       mutate(
         data = map2(data, model,
                     function(data, model){
@@ -684,36 +770,54 @@ server <- function(input, output, session){
     
   
   
-  # Plot total cases ####
+  # Plots ####
   plot_cases_tot <- reactive({
     
+    # variable <- if_else(input$regionalDetail_radio == "Provincia",
+    #                     "casi", input$variable)
+    
     covid_dataset_filtered() %>% 
-      ggplot(aes(x = data, y = get(str_c("casi", "_tot", onpop())),
+      # ggplot(aes(x = data, y = get(str_c("casi", "_tot", onpop())),
+      ggplot(aes(x = data, y = get(str_c(variable(), "_tot", onpop())),
                  color = get(selecting_detail()),
-                 text = popup,
+                 text = get(str_c("popup_", variable())),
                  group = get(selecting_detail()))) +
       labs(color = selected_detail_label(),
-           y = str_c("Casi", onpop_description()))
+           y = str_c(variable_description(), onpop_description()))
   
   })
   
-  output$plot_cases_tot <- plotly::renderPlotly({
+  plot_cases_new <- reactive({
+    covid_dataset_filtered() %>% 
+      ggplot(aes(x = data, y = get(str_c(variable(), "_new", onpop())),
+                 color = get(selecting_detail()),
+                 text = get(str_c("popup_", variable())),
+                 group = get(selecting_detail()))) +
+      labs(color = selected_detail_label(),
+           y = str_c(variable_description(), onpop_description()))
     
+  })
+  
+  
+  plot_cases <- function(version){
     if(is.null(selected_detail())){
       p <- tibble(data = 0, casi_tot = 0,
-                  denominazione_provincia = "", popup = "") %>% 
+                  denominazione_provincia = "", popup_casi = "") %>% 
         ggplot(aes(x = data, y = casi_tot,
                    color = denominazione_provincia,
-                   text = popup,
-                   group = denominazione_provincia))
-      
-      p <- p +
+                   text = popup_casi,
+                   group = denominazione_provincia)) +
         labs(color = selected_detail_label(),
-             y = str_c("Casi", onpop_description()))
+             y = str_c(variable_description(), onpop_description()))
       
     } else {
       
-      p <- plot_cases_tot()
+      if(version == "tot"){
+        p <- plot_cases_tot()
+      } else {
+        p <- plot_cases_new()
+      }
+      
       
       if("Dati osservati" %in% input$element_plot_check){
         p <- p +
@@ -723,91 +827,149 @@ server <- function(input, output, session){
       
       if("Curva approssimante" %in% input$element_plot_check){
         
-        p <- p +
-          geom_line(data = covid_fitted_tot(),
-                    aes(y = get(str_c("fit", onpop()))),
-                    size = 1)
-        
-        if(input$showSE_check){
-          p <- p + geom_ribbon(data = covid_fitted_tot(),
-                               aes(ymin = get(str_c("lower", onpop())),
-                                   ymax = get(str_c("upper", onpop())),
-                                   y = get(str_c("fit", onpop())),
-                                   fill = get(selecting_detail())),
-                               color = NA,
-                               alpha = .4,
-                               show.legend = FALSE)
+        if(version == "tot"){
+          p <- p +
+            geom_line(data = covid_fitted_tot(),
+                      aes(y = get(str_c("fit", onpop()))),
+                      size = 1)
+          
+          if(input$showSE_check){
+            p <- p + geom_ribbon(data = covid_fitted_tot(),
+                                 aes(ymin = get(str_c("lower", onpop())),
+                                     ymax = get(str_c("upper", onpop())),
+                                     # y = get(str_c("fit", onpop())),
+                                     fill = get(selecting_detail())),
+                                 color = NA,
+                                 alpha = .4,
+                                 show.legend = FALSE)
+          }
+        } else {
+          p <- p +
+            geom_line(data = covid_fitted_new(),
+                      aes(y = get(str_c("fit", onpop()))),
+                      size = 1)
+          
+          if(input$showSE_check){
+            p <- p + geom_ribbon(data = covid_fitted_new(),
+                                 aes(ymin = get(str_c("lower", onpop())),
+                                     ymax = get(str_c("upper", onpop())),
+                                     # y = get(str_c("fit", onpop())),
+                                     fill = get(selecting_detail())),
+                                 color = NA,
+                                 alpha = .4,
+                                 show.legend = FALSE)
+          }
         }
-  
+        
       }
       
     }
     
     ggplotly(p, tooltip = "text")
+  }
+  
+  # Plot total cases ####
+  
+  output$plot_cases_tot <- plotly::renderPlotly({
+    
+    plot_cases(version = "tot")
+    
+    # if(is.null(selected_detail())){
+    #   p <- tibble(data = 0, casi_tot = 0,
+    #               denominazione_provincia = "", popup_casi = "") %>% 
+    #     ggplot(aes(x = data, y = casi_tot,
+    #                color = denominazione_provincia,
+    #                text = popup_casi,
+    #                group = denominazione_provincia)) +
+    #     labs(color = selected_detail_label(),
+    #          y = str_c(variable_description(), onpop_description()))
+    #   
+    # } else {
+    #   
+    #   p <- plot_cases_tot()
+    #   
+    #   if("Dati osservati" %in% input$element_plot_check){
+    #     p <- p +
+    #       geom_line() +
+    #       geom_point()
+    #   }
+    #   
+    #   if("Curva approssimante" %in% input$element_plot_check){
+    #     
+    #     p <- p +
+    #       geom_line(data = covid_fitted_tot(),
+    #                 aes(y = get(str_c("fit", onpop()))),
+    #                 size = 1)
+    #     
+    #     if(input$showSE_check){
+    #       p <- p + geom_ribbon(data = covid_fitted_tot(),
+    #                            aes(ymin = get(str_c("lower", onpop())),
+    #                                ymax = get(str_c("upper", onpop())),
+    #                                # y = get(str_c("fit", onpop())),
+    #                                fill = get(selecting_detail())),
+    #                            color = NA,
+    #                            alpha = .4,
+    #                            show.legend = FALSE)
+    #     }
+    # 
+    #   }
+    #   
+    # }
+    # 
+    # ggplotly(p, tooltip = "text")
     
   })
   
   
   # Plot new cases ####
-  plot_cases_new <- reactive({
-    covid_dataset_filtered() %>% 
-      ggplot(aes(x = data, y = get(str_c("casi", "_new", onpop())),
-                 color = get(selecting_detail()),
-                 text = popup,
-                 group = get(selecting_detail()))) +
-      labs(color = selected_detail_label(),
-           y = str_c("Casi", onpop_description()))
-    
-  })
-  
   
   output$plot_cases_new <- plotly::renderPlotly({
     
-    if(is.null(selected_detail())){
-      p <- tibble(data = 0, casi_tot = 0,
-                  denominazione_province = "", popup = "") %>% 
-        ggplot(aes(x = data, y = casi_tot,
-                   color = denominazione_province,
-                   text = popup,
-                   group = denominazione_province))
-      
-      p <- p +
-        labs(color = selected_detail_label(),
-             y = str_c("Casi", onpop_description()))
-      
-    } else {
-      
-      p <- plot_cases_new()
-      
-      if("Dati osservati" %in% input$element_plot_check){
-        p <- p +
-          geom_line() +
-          geom_point()
-      }
-      
-      if("Curva approssimante" %in% input$element_plot_check){
-        
-        p <- p +
-          geom_line(data = covid_fitted_new(),
-                    aes(y = get(str_c("fit", onpop()))),
-                    size = 1)
-        
-        if(input$showSE_check){
-          p <- p + geom_ribbon(data = covid_fitted_new(),
-                               aes(ymin = get(str_c("lower", onpop())),
-                                   ymax = get(str_c("upper", onpop())),
-                                   y = get(str_c("fit", onpop())),
-                                   fill = get(selecting_detail())),
-                               color = NA,
-                               alpha = .4,
-                               show.legend = FALSE)
-        }
-
-      }
+    plot_cases(version = "new")
     
-    }
-    
-    ggplotly(p, tooltip = "text")
+    # if(is.null(selected_detail())){
+    #   p <- tibble(data = 0, casi_tot = 0,
+    #               denominazione_province = "", popup_casi = "") %>% 
+    #     ggplot(aes(x = data, y = casi_tot,
+    #                color = denominazione_province,
+    #                text = popup_casi,
+    #                group = denominazione_province)) +
+    #     labs(color = selected_detail_label(),
+    #          y = str_c("Casi", onpop_description()))
+    #   
+    # } else {
+    #   
+    #   p <- plot_cases_new()
+    #   
+    #   if("Dati osservati" %in% input$element_plot_check){
+    #     p <- p +
+    #       geom_line() +
+    #       geom_point()
+    #   }
+    #   
+    #   if("Curva approssimante" %in% input$element_plot_check){
+    #     
+    #     p <- p +
+    #       geom_line(data = covid_fitted_new(),
+    #                 aes(y = get(str_c("fit", onpop()))),
+    #                 size = 1)
+    #     
+    #     if(input$showSE_check){
+    #       p <- p + geom_ribbon(data = covid_fitted_new(),
+    #                            aes(ymin = get(str_c("lower", onpop())),
+    #                                ymax = get(str_c("upper", onpop())),
+    #                                # y = get(str_c("fit", onpop())),
+    #                                fill = get(selecting_detail())),
+    #                            color = NA,
+    #                            alpha = .4,
+    #                            show.legend = FALSE)
+    #     }
+    # 
+    #   }
+    # 
+    # }
+    # 
+    # ggplotly(p, tooltip = "text")
     
   })
   
@@ -854,13 +1016,13 @@ server <- function(input, output, session){
     showModal(modalDialog(
       title = "Seleziona le prime n regioni",
       numericInput("top_n", "Scegli quante regioni vuoi visualizzare",
-                   value = ifelse(input$regionalDetail_radio == "Regioni", 5, 2),
+                   value = if_else(input$regionalDetail_radio == "Regioni", 5, 2),
                    min = 1, max = 20, step = 1),
       selectInput("criteria", "Seleziona il criterio",
-                  choices = c("Casi totali",
-                              "Casi totali / popolazione",
-                              "Nuovi casi",
-                              "Nuovi casi / popolazione"),
+                  choices = c("Casi totali" = "casi_tot",
+                              "Casi totali / popolazione" = "casi_tot_onpop",
+                              "Nuovi casi" = "casi_new",
+                              "Nuovi casi / popolazione" = "casi_new_onpop"),
                   selected = ""),
       easyClose = TRUE,
       footer = tagList(
@@ -873,37 +1035,27 @@ server <- function(input, output, session){
   observeEvent(input$select_top_n_reg_button_ok, {
     # print(input$top_n)
 
-    if(input$criteria == "Casi totali / popolazione"){
+    if(input$criteria %in% c("casi_tot", "casi_tot_onpop")){
       regioni_toSelect <- covid_reg %>%
-        filter(data == max(data)) %>%
-        top_n(n = input$top_n, wt = casi_tot_onpop) %>%
-        arrange(-casi_tot) %>%
-        .$denominazione_regione
-    } else if(input$criteria == "Casi totali") {
-      regioni_toSelect <- covid_reg %>%
-        filter(data == max(data)) %>%
-        top_n(n = input$top_n, wt = casi_tot) %>%
-        arrange(-casi_tot) %>%
-        .$denominazione_regione
-    } else if(input$criteria == "Nuovi casi / popolazione") {
-      regioni_toSelect <- covid_reg %>%
-        filter(data == max(data)) %>%
-        top_n(n = input$top_n, wt = casi_new_onpop) %>%
-        arrange(-casi_tot) %>%
+        filter(data == max(data)) %>% 
+        top_n(n = input$top_n, wt = get(input$criteria)) %>%
+        arrange(-casi_tot) %>% 
         .$denominazione_regione
     } else {
       regioni_toSelect <- covid_reg %>%
-        filter(data == max(data)) %>%
-        top_n(n = input$top_n, wt = casi_new) %>%
-        arrange(-casi_tot) %>%
+        filter(data >= max(data) - 2) %>%
+        group_by(denominazione_regione) %>%
+        summarize(criteria = sum(get(input$criteria)),
+                  casi_tot = max(casi_tot)) %>%
+        top_n(n = input$top_n, wt = criteria) %>%
+        arrange(-casi_tot) %>% 
         .$denominazione_regione
     }
-
     
     if(input$regionalDetail_radio == "Regioni"){
       updatePickerInput(session = session, inputId = "regioni_displayed_2",
                         selected = regioni_toSelect)  
-    } else{
+    } else {
       updatePickerInput(session = session, inputId = "regioni_displayed",
                         selected = regioni_toSelect)  
     }
@@ -919,10 +1071,10 @@ server <- function(input, output, session){
       numericInput("top_n", "Scegli quante province vuoi visualizzare",
                    value = 5, min = 1, max = 20, step = 1),
       selectInput("criteria", "Seleziona il criterio",
-                  choices = c("Casi totali",
-                              "Casi totali / popolazione",
-                              "Nuovi casi",
-                              "Nuovi casi / popolazione"),
+                  choices = c("Casi totali" = "casi_tot",
+                              "Casi totali / popolazione" = "casi_tot_onpop",
+                              "Nuovi casi" = "casi_new",
+                              "Nuovi casi / popolazione" = "casi_new_onpop"),
                   selected = ""),
       easyClose = TRUE,
       footer = tagList(
@@ -935,28 +1087,19 @@ server <- function(input, output, session){
   observeEvent(input$select_top_n_prov_button_ok, {
     # print(input$top_n)
     
-    if(input$criteria == "Casi totali / popolazione"){
+    if(input$criteria %in% c("casi_tot", "casi_tot_onpop")){
       province_toSelect <- covid_prov %>% 
         filter(data == max(data)) %>% 
-        top_n(n = input$top_n, wt = casi_tot_onpop) %>%
-        arrange(-casi_tot) %>% 
-        .$denominazione_provincia  
-    } else if(input$criteria == "Casi totali") {
-      province_toSelect <- covid_prov %>% 
-        filter(data == max(data)) %>% 
-        top_n(n = input$top_n, wt = casi_tot) %>%
-        arrange(-casi_tot) %>% 
-        .$denominazione_provincia
-    } else if(input$criteria == "Nuovi casi / popolazione") {
-      province_toSelect <- covid_prov %>% 
-        filter(data == max(data)) %>% 
-        top_n(n = input$top_n, wt = casi_new_onpop) %>%
+        top_n(n = input$top_n, wt = get(input$criteria)) %>%
         arrange(-casi_tot) %>% 
         .$denominazione_provincia
     } else {
       province_toSelect <- covid_prov %>% 
-        filter(data == max(data)) %>% 
-        top_n(n = input$top_n, wt = casi_new) %>%
+        filter(data >= max(data) - 2) %>%
+        group_by(denominazione_provincia) %>%
+        summarize(criteria = sum(get(input$criteria)),
+                  casi_tot = max(casi_tot)) %>%
+        top_n(n = input$top_n, wt = criteria) %>%
         arrange(-casi_tot) %>% 
         .$denominazione_provincia
     }
@@ -968,9 +1111,6 @@ server <- function(input, output, session){
     
     removeModal()
   }, ignoreInit = TRUE)
-  
-  
-  
   
   
   
@@ -1036,6 +1176,25 @@ server <- function(input, output, session){
   })
   
   
+  # Select variable ####
+  observeEvent(input$variable, {
+    if(input$variable %in% c("positivi", "osped")){
+      updateTabsetPanel(session = session, inputId = "plots_tabPanel", selected = "plot_cases_tot_panel")
+      hideTab(inputId = "plots_tabPanel", target = "plot_cases_new_panel")
+    } else {
+      showTab(inputId = "plots_tabPanel", target = "plot_cases_new_panel")
+    }
+  })
+  
+  # output$plot_cases_tot_panel_title = renderText({
+  #   if(input$variable %in% c("positivi", "osped")){
+  #     "Casi attuali"
+  #   } else {
+  #     "Casi totali"
+  #   }
+  # })
+  
+  
   
   # # Create table ####
   # output$table_provinces <- DT::renderDataTable({
@@ -1083,7 +1242,7 @@ server <- function(input, output, session){
                   fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
                   highlightOptions = highlightOptions(color = "white", weight = 2,
                                                       bringToFront = TRUE),
-                  popup = ~popup) %>%
+                  popup = ~popup_casi) %>%
       addLegend(position = "bottomright",
                 pal = pal_casi_tot(), opacity = 1,
                 bins = log(10^(0:log10(ceil10(max(covid_prov$casi_tot + 1))))),
@@ -1118,15 +1277,6 @@ server <- function(input, output, session){
   
   observe({
     
-    # print("Day slider")
-    # print(input$day_slider)
-    # print("Day slider 1")
-    # print(input$day_slider1)
-    # print("Day slider 2")
-    # print(input$day_slider2)
-    
-    
-    
     # if(length(input$day_slider == 1)){
     if(input$variable_map_radio == "Casi cumulati totali" & !is.null(input$day_slider1)){
       # Visualize total cumulated cases
@@ -1143,7 +1293,7 @@ server <- function(input, output, session){
                       fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
                       highlightOptions = highlightOptions(color = "white", weight = 2,
                                                           bringToFront = TRUE),
-                      popup = ~popup)
+                      popup = ~popup_casi)
       } else {
         leafletProxy("map_leaflet", data = map_prov) %>%
           addPolygons(layerId = ~SIGLA,
@@ -1152,7 +1302,7 @@ server <- function(input, output, session){
                       fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
                       highlightOptions = highlightOptions(color = "white", weight = 2,
                                                           bringToFront = TRUE),
-                      popup = ~popup)
+                      popup = ~popup_casi)
       }
     } else if(!is.null(input$day_slider2)) {
       #  Visualize cases over period
@@ -1165,9 +1315,9 @@ server <- function(input, output, session){
                     summarize(denominazione_provincia = max(denominazione_provincia),
                               casi_tot = sum(casi_new),
                               casi_tot_onpop = sum(casi_new_onpop)) %>% 
-                    mutate(casi_tot = ifelse(casi_tot < 0, 0, casi_tot),
-                           casi_tot_onpop = ifelse(casi_tot_onpop < 0, 0, casi_tot_onpop),
-                           popup = str_c("<b>", denominazione_provincia, "</b>",
+                    mutate(casi_tot = if_else(casi_tot < 0, 0, casi_tot),
+                           casi_tot_onpop = if_else(casi_tot_onpop < 0, 0, casi_tot_onpop),
+                           popup_casi = str_c("<b>", denominazione_provincia, "</b>",
                                          "<br>Periodo: ", input$day_slider2[1], ", ", input$day_slider2[2],
                                          "<br>Totale casi nel periodo: ", casi_tot,
                                          "<br>Totale casi nel periodo / pop: ", round(casi_tot_onpop, 2), " /100 000")),
@@ -1181,7 +1331,7 @@ server <- function(input, output, session){
                       fillColor = ~pal_casi_tot_onpop()(log(casi_tot_onpop + 1)),
                       highlightOptions = highlightOptions(color = "white", weight = 2,
                                                           bringToFront = TRUE),
-                      popup = ~popup)
+                      popup = ~popup_casi)
       } else {
         leafletProxy("map_leaflet", data = map_prov) %>%
           addPolygons(layerId = ~SIGLA,
@@ -1190,7 +1340,7 @@ server <- function(input, output, session){
                       fillColor = ~pal_casi_tot()(log(casi_tot + 1)),
                       highlightOptions = highlightOptions(color = "white", weight = 2,
                                                           bringToFront = TRUE),
-                      popup = ~popup)
+                      popup = ~popup_casi)
       }
     }
     
