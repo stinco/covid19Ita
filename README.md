@@ -7,7 +7,7 @@
 
 With this web app you can explore the Covid-19 spreading in Italy. The whole app has been made with [R Shiny](https://shiny.rstudio.com/).
 
-You can run it from [here](https://stinco.shinyapps.io/covid19itaprov/).
+[You can run it from here](https://stinco.shinyapps.io/covid19itaprov/).
 
 
 ## Project description
