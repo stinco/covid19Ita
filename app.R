@@ -34,8 +34,9 @@ theme_set(theme_bw())
 # Prepare provinces data ####
 
 # Read data
-url_prov <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv")
-covid_prov <- read_csv(url_prov, na = "")
+# url_prov <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-province/dpc-covid19-ita-province.csv")
+# covid_prov <- read_csv(url_prov, na = "")
+covid_prov <- read_csv("www/data/dpc-covid19-ita-province.csv", na = "")
 
 # Remove summary rows
 covid_prov <- covid_prov %>% 
@@ -113,8 +114,9 @@ regioni <- sort(unique(covid_prov$denominazione_regione))
 # Prepare regions data ####
 
 # Read data
-url_reg <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni.csv")
-covid_reg <- read_csv(url_reg, na = "")
+# url_reg <- getURL("https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni.csv")
+# covid_reg <- read_csv(url_reg, na = "")
+covid_reg <- read_csv("www/data/dpc-covid19-ita-regioni.csv", na = "")
 
 # Mutate date-time into date
 covid_reg <- covid_reg %>% 

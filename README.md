@@ -1,6 +1,6 @@
 # Covid-19 in Italy with R Shiny
 
-![header](img/screenshot_plot.png)
+![header](img/screenshot_plot_3.png)
 
 
 ## App description
