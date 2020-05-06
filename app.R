@@ -1,9 +1,9 @@
 #####
 # shiny02_dashboard
 # Creation date: 28/03/2020
-# Version date: 25/04/2020
+# Version date: 6/05/2020
 # Author: Leonardo Stincone
-# R 3.6.3
+# R 4.0.0
 #####
 
 # Libraries ####
@@ -61,8 +61,12 @@ covid_prov <- covid_prov %>%
   mutate(data = as.Date(data)) %>% 
   # fix the name of the province Trientino Alto Adige
   mutate(denominazione_regione = if_else(codice_regione == "04",
-                                        "Trentino Alto Adige",
-                                        denominazione_regione))
+                                         "Trentino Alto Adige",
+                                         denominazione_regione))
+
+# Remove the apostrophe in regions names
+covid_prov <- covid_prov %>% 
+  mutate(denominazione_regione = str_replace_all(denominazione_regione, "'", " "))
 
 # Create daily cases
 covid_prov <- covid_prov %>% 
@@ -99,11 +103,11 @@ covid_prov <- covid_prov %>%
 
 covid_prov <- covid_prov %>% 
   mutate(popup_casi = str_c("<b>", denominazione_provincia, "</b>",
-                       "<br>Data: ", data,
-                       "<br>Totale casi: ", casi_tot,
-                       "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
-                       "<br>Nuovi casi: ", casi_new,
-                       "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000"))
+                            "<br>Data: ", data,
+                            "<br>Totale casi: ", casi_tot,
+                            "<br>Totale casi / pop: ", round(casi_tot_onpop, 2), " /100 000",
+                            "<br>Nuovi casi: ", casi_new,
+                            "<br>Nuovi casi: / pop: ", round(casi_new_onpop, 2), " /100 000"))
 
 split_tibble <- function(tibble, column = 'col') {
   tibble %>%
@@ -116,7 +120,7 @@ province_list <- covid_prov %>%
   unique() %>% 
   split_tibble(column = "denominazione_regione") %>% 
   lapply(function(x){x[["denominazione_provincia"]]})
-  
+
 
 province <- sort(unique(covid_prov$denominazione_provincia))
 
@@ -168,11 +172,11 @@ covid_reg <- covid_reg %>%
          positivi_tot = totale_positivi,
          osped_tot = totale_ospedalizzati,
          terap_tot = terapia_intensiva
-         ) %>% 
+  ) %>% 
   # fix the name of the province Trientino Alto Adige
   mutate(denominazione_regione = if_else(codice_regione == "04",
-                                        "Trentino Alto Adige",
-                                        denominazione_regione)) %>% 
+                                         "Trentino Alto Adige",
+                                         denominazione_regione)) %>% 
   group_by(data, stato, codice_regione, denominazione_regione) %>% 
   summarize(casi_tot = sum(casi_tot),
             deced_tot = sum(deced_tot),
@@ -181,6 +185,12 @@ covid_reg <- covid_reg %>%
             osped_tot = sum(osped_tot),
             terap_tot = sum(terap_tot)) %>% 
   ungroup()
+
+
+# Remove the apostrophe in regions names
+covid_reg <- covid_reg %>% 
+  mutate(denominazione_regione = str_replace_all(denominazione_regione, "'", " "))
+
 
 
 # Create national data
@@ -213,19 +223,19 @@ covid_reg <- covid_reg %>%
          positivi_tot_previous_day = if_else(is.na(positivi_tot_previous_day), 0, positivi_tot_previous_day),
          osped_tot_previous_day = if_else(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
          terap_tot_previous_day = if_else(is.na(terap_tot_previous_day), 0, terap_tot_previous_day)
-         ) %>% 
+  ) %>% 
   mutate(casi_new = casi_tot - casi_tot_previous_day,
          deced_new = deced_tot - deced_tot_previous_day,
          tamponi_new = tamponi_tot - tamponi_tot_previous_day,
          positivi_new = positivi_tot - positivi_tot_previous_day,
          osped_new = osped_tot - osped_tot_previous_day,
          terap_new = terap_tot - terap_tot_previous_day
-         ) %>%
+  ) %>%
   # Fix the problem of negative data in daily cases
   mutate(casi_new = if_else(casi_new < 0, 0, casi_new),
          deced_new = if_else(deced_new < 0, 0, deced_new),
          tamponi_new = if_else(tamponi_new < 0, 0, tamponi_new)
-         ) %>% 
+  ) %>% 
   select(-matches("_previous_day"))
 
 
@@ -282,8 +292,8 @@ covid_reg <- covid_reg %>%
                              "<br>Data: ", data,
                              "<br>Attualmente in terapia intensiva: ", terap_tot,
                              "<br>Attualmente in terapia intensiva / pop: ", round(terap_tot_onpop, 2), " /100 000")
-         )
-                            
+  )
+
 
 
 # Create daily cases for national data
@@ -296,7 +306,7 @@ covid_ita <- covid_ita %>%
                      positivi_tot_previous_day = positivi_tot,
                      osped_tot_previous_day = osped_tot,
                      terap_tot_previous_day = terap_tot
-                     ) %>% 
+              ) %>% 
               mutate(data = data + 1),
             by = "data") %>% 
   mutate(casi_tot_previous_day = if_else(is.na(casi_tot_previous_day), 0, casi_tot_previous_day),
@@ -305,14 +315,14 @@ covid_ita <- covid_ita %>%
          positivi_tot_previous_day = if_else(is.na(positivi_tot_previous_day), 0, positivi_tot_previous_day),
          osped_tot_previous_day = if_else(is.na(osped_tot_previous_day), 0, osped_tot_previous_day),
          terap_tot_previous_day = if_else(is.na(terap_tot_previous_day), 0, terap_tot_previous_day)
-         ) %>% 
+  ) %>% 
   mutate(casi_new = casi_tot - casi_tot_previous_day,
          deced_new = deced_tot - deced_tot_previous_day,
          tamponi_new = tamponi_tot - tamponi_tot_previous_day,
          positivi_new = positivi_tot - positivi_tot_previous_day,
          osped_new = osped_tot - osped_tot_previous_day,
          terap_new = terap_tot - terap_tot_previous_day
-         ) %>%
+  ) %>%
   # Fix the problem of negative data in daily cases
   mutate(casi_new = if_else(casi_new < 0, 0, casi_new),
          deced_new = if_else(deced_new < 0, 0, deced_new),
@@ -369,7 +379,7 @@ covid_ita <- covid_ita %>%
                              "<br>Data: ", data,
                              "<br>Attualmente in terapia intensiva: ", terap_tot,
                              "<br>Attualmente in terapia intensiva / pop: ", round(terap_tot_onpop, 2), " /100 000")
-         )
+  )
 
 
 
@@ -402,8 +412,11 @@ map_prov_data <- map_prov@data
 
 # Define models for trend approximations ####
 
+k <- floor((as.numeric(max(covid_reg$data) - min(covid_reg$data))) / 2)
+# k <- as.numeric(max(covid_reg$data) - min(covid_reg$data))
+
 model <- function(variable, version, df, sp) {
-  gam(formula = as.formula(str_c(variable, "_", version, " ~ s(as.numeric(data), k = 30) + offset(log(popolazione))")),
+  gam(formula = as.formula(str_c(variable, "_", version, " ~ s(as.numeric(data), k = ", k, ") + offset(log(popolazione))")),
       sp = sp,
       data = df,
       family = poisson(link = "log"))
@@ -453,15 +466,15 @@ ui <- dashboardPage(
   dashboardHeader(title = "Diffusione del Covid-19 in Italia", titleWidth = 400,
                   tags$li(class = "dropdown", tags$a(href = "https://www.linkedin.com/in/leonardo-stincone/",
                                                      icon("linkedin"), "My Profile", target = "_blank")
-                          ),
+                  ),
                   tags$li(class = "dropdown", tags$a(href = "https://github.com/stinco/covid19Ita",
                                                      icon("github"), "Source Code", target ="_blank"))
   ),
   dashboardSidebar({
     sidebarMenu(
+      menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome")),
       menuItem("Mappe", tabName = "tab_maps", icon = icon("map", lib = "font-awesome")),
-      menuItem("Grafici", tabName = "tab_plots", icon = icon("chart-line", lib = "font-awesome"))#,
-      # menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
+      menuItem("Tabelle", tabName = "tab_tables", icon = icon("table", lib = "font-awesome"))
     )
   }),
   dashboardBody(
@@ -469,133 +482,133 @@ ui <- dashboardPage(
     #   tags$link(rel = "stylesheet", type = "text/css", href = "headerStyle.css.css")
     # ),
     {
-    # Tab plots ####
-    tabItems(
-      tabItem(tabName = "tab_plots",
-              fluidRow(
-                shinyjs::useShinyjs(),
-                # box(
+      # Tab plots ####
+      tabItems(
+        tabItem(tabName = "tab_plots",
+                fluidRow(
+                  shinyjs::useShinyjs(),
+                  # box(
                   # sidebarLayout(
                   # column(
-                    box(
-                      width = 5,
-                      tags$h4("Seleziona province"),
-                      # inputPanel(
-                      wellPanel(
-                        # verticalLayout(
-                        radioGroupButtons(
-                          inputId = "regionalDetail_radio",
-                          label = "Seleziona il dettaglio",
-                          choices = c("Italia", "Regioni", "Province"),
-                          individual = TRUE,
-                          checkIcon = list(
-                            yes = tags$i(class = "fa fa-circle", 
-                                         style = "color: steelblue"),
-                            no = tags$i(class = "fa fa-circle-o", 
-                                        style = "color: steelblue"))
-                        ),
-                        selectInput("variable", "Seleziona la grandezza da visualizzare",
-                                    choices = c("Casi confermati" = "casi",
-                                                "Decessi" = "deced",
-                                                "Tamponi" = "tamponi",
-                                                "Attualmente positivi" = "positivi",
-                                                "Attualmente ospedalizzati" = "osped",
-                                                "Attualmente in terapia intensiva" = "terap"),
-                                    selected = "casi"),
-                        pickerInput(
-                          inputId = "province_displayed",
-                          label = "Seleziona province", 
-                          # choices = province,
-                          choices = province_list,
-                          selected = province_init,
-                          multiple = TRUE,
-                          options = list(
-                            `live-search` = TRUE)),
-                        pickerInput(
-                          inputId = "regioni_displayed",
-                          label = "Seleziona regione", 
-                          choices = regioni,
-                          # selected = "",
-                          multiple = TRUE,
-                          options = list(
-                            `live-search` = TRUE)
-                        ),
-                        pickerInput(
-                          inputId = "regioni_displayed_2",
-                          label = "Seleziona regione", 
-                          choices = regioni,
-                          # selected = "",
-                          multiple = TRUE,
-                          options = list(
-                            `live-search` = TRUE)
-                        ),
-                        # tags$br(),
-                        actionButton("deselect_button",
-                                     "Deseleziona tutto"),
-                        actionButton("select_top_n_reg_button",
-                                     "Seleziona le prime n regioni"),
-                        actionButton("select_top_n_prov_button",
-                                     "Seleziona le prime n province")
+                  box(
+                    width = 5,
+                    tags$h4("Selezione"),
+                    # inputPanel(
+                    wellPanel(
+                      # verticalLayout(
+                      radioGroupButtons(
+                        inputId = "regionalDetail_radio",
+                        label = "Seleziona il dettaglio",
+                        choices = c("Italia", "Regioni", "Province"),
+                        individual = TRUE,
+                        checkIcon = list(
+                          yes = tags$i(class = "fa fa-circle", 
+                                       style = "color: steelblue"),
+                          no = tags$i(class = "fa fa-circle-o", 
+                                      style = "color: steelblue"))
+                      ),
+                      selectInput("variable", "Seleziona la grandezza da visualizzare",
+                                  choices = c("Casi confermati" = "casi",
+                                              "Decessi" = "deced",
+                                              "Tamponi" = "tamponi",
+                                              "Attualmente positivi" = "positivi",
+                                              "Attualmente ospedalizzati" = "osped",
+                                              "Attualmente in terapia intensiva" = "terap"),
+                                  selected = "casi"),
+                      pickerInput(
+                        inputId = "province_displayed",
+                        label = "Seleziona province", 
+                        # choices = province,
+                        choices = province_list,
+                        selected = province_init,
+                        multiple = TRUE,
+                        options = list(
+                          `live-search` = TRUE)),
+                      pickerInput(
+                        inputId = "regioni_displayed",
+                        label = "Seleziona regione", 
+                        choices = regioni,
+                        # selected = "",
+                        multiple = TRUE,
+                        options = list(
+                          `live-search` = TRUE)
+                      ),
+                      pickerInput(
+                        inputId = "regioni_displayed_2",
+                        label = "Seleziona regione", 
+                        choices = regioni,
+                        # selected = "",
+                        multiple = TRUE,
+                        options = list(
+                          `live-search` = TRUE)
+                      ),
+                      # tags$br(),
+                      actionButton("deselect_button",
+                                   "Deseleziona tutto"),
+                      actionButton("select_top_n_reg_button",
+                                   "Seleziona le prime n regioni"),
+                      actionButton("select_top_n_prov_button",
+                                   "Seleziona le prime n province")
                       # )
                       # )
+                    ),
+                    tags$br(),
+                    tags$h4("Opzioni"),
+                    # inputPanel(
+                    wellPanel(
+                      # width = 5,
+                      tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
+                      tags$br(),
+                      tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
+                               awesomeCheckbox(
+                                 inputId = "rescalePop_check",
+                                 label = "Riscala sulla popolazione", 
+                                 value = FALSE#,
+                               )
                       ),
                       tags$br(),
-                      tags$h4("Opzioni"),
-                      # inputPanel(
-                      wellPanel(
-                        # width = 5,
-                        tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
-                        tags$br(),
-                        tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
-                                 awesomeCheckbox(
-                                   inputId = "rescalePop_check",
-                                   label = "Riscala sulla popolazione", 
-                                   value = FALSE#,
-                                  )
-                        ),
-                        tags$br(),
-                        tags$div(# title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) fittata sui dati empirici",
-                          title = "La curva approssimante è calcolata tramite un Generalized Additive Model (GAM) fittato sui dati empirici",
-                          checkboxGroupButtons(
-                            inputId = "element_plot_check",
-                            label = "Seleziona gli elementi che vuoi visualizzare",
-                            choices = c("Dati osservati", 
-                                        "Curva approssimante"),
-                            selected = "Dati osservati",
-                            # direction = "vertical",
-                            checkIcon = list(
-                              yes = tags$i(class = "fa fa-check-square", 
-                                          style = "color: steelblue"),
-                              no = tags$i(class = "fa fa-square-o", 
-                                          style = "color: steelblue"))
+                      tags$div(# title = "La curva approssimante è calcolata tramite una Local Polynomial Regression (LOESS) fittata sui dati empirici",
+                        title = "La curva approssimante è calcolata tramite un Generalized Additive Model (GAM) fittato sui dati empirici",
+                        checkboxGroupButtons(
+                          inputId = "element_plot_check",
+                          label = "Seleziona gli elementi che vuoi visualizzare",
+                          choices = c("Dati osservati", 
+                                      "Curva approssimante"),
+                          selected = "Dati osservati",
+                          # direction = "vertical",
+                          checkIcon = list(
+                            yes = tags$i(class = "fa fa-check-square", 
+                                         style = "color: steelblue"),
+                            no = tags$i(class = "fa fa-square-o", 
+                                        style = "color: steelblue"))
                         )),
-                        hidden(
-                          tags$br(),
-                          tags$b(id = "showSE_text", "Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
-                          tags$br()
-                        )
+                      hidden(
+                        tags$br(),
+                        tags$b(id = "showSE_text", "Seleziona se vuoi visualizzare gli intervalli di confidenza per la curva approssimante"),
+                        tags$br()
+                      )
                       ,
-                        tags$div(id = "tooltip_check",
-                                   title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
-                                   hidden(
-                                   awesomeCheckbox(
-                              inputId = "showSE_check",
-                              label = "Intervalli di confidenza", 
-                              value = FALSE#,
-                            )
-                          )
-                      ,
-                          tags$br()
-                        ),
-                        hidden(
-                            sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
-                                        min = 0, max = 10, step = .01,
-                                        value = 2
-                            )
+                      tags$div(id = "tooltip_check",
+                               title = "Le opzioni sulla curva approssimante sono disponibili solo se è selezionata la curva approssimante",
+                               hidden(
+                                 awesomeCheckbox(
+                                   inputId = "showSE_check",
+                                   label = "Intervalli di confidenza", 
+                                   value = FALSE#,
+                                 )
+                               )
+                               ,
+                               tags$br()
+                      ),
+                      hidden(
+                        sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
+                                    min = 0, max = 5, step = .01,
+                                    value = 2
                         )
-                        )
-                    ),
-                    tags$head(tags$script('
+                      )
+                    )
+                  ),
+                  tags$head(tags$script('
                       // Define function to set height of "map" and "map_container"
                       setHeight = function() {
                         var window_height = $(window).height();
@@ -617,86 +630,99 @@ ui <- dashboardPage(
                         setHeight();
                       });
                     ')),
-                    box(#fid = "map_container",
-                        width = 7,
-                        tabsetPanel(id = "plots_tabPanel",
-                          tabPanel(title = "Casi totali",
-                                   value = "plot_cases_tot_panel",
-                                   # plotly::plotlyOutput("plot_cases_tot",
-                                   #                      width = "100%", height = "100%") %>% 
-                                   ggiraph::girafeOutput("plot_cases_tot",
-                                                         width = "100%", height = "100%") %>%
-                                     withSpinner()
-                                   ),
-                          tabPanel(title = "Casi giornalieri",
-                                   value = "plot_cases_new_panel",
-                                  # plotly::plotlyOutput("plot_cases_new",
-                                  #                      width = "100%", height = "100%") %>% 
-                                  ggiraph::girafeOutput("plot_cases_new",
-                                                        width = "100%", height = "100%") %>%
-                                    withSpinner())
-                        )
-                    )
-                  # )
-                # )
-              )
-                
-      ),
-      # # Tab tables ####
-      # tabItem(tabName = "tab_tables",
-      #         fluidRow(
-      #           # box(
-      #             # width = 8, height = 6,
-      #             DT::dataTableOutput("table_provinces")
-      #           # )
-      #         )
-      # ),
-      # Tab maps ####
-      tabItem(tabName = "tab_maps",
-              fluidRow(
-                box(width = 5,
-                    tags$h4("Opzioni"),
-                    wellPanel(
-                      tags$div(title = "Premi il tasto play per visualizzare l'evoluzione nel tempo",
-                        # sliderInput("day_slider", "Giorno di riferimento",
-                        #             min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
-                        #             value = max(covid_prov$data),
-                        #             animate = T
-                        # )
-                        uiOutput("day_slider")
-                      ),
-                      tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
-                      tags$br(),
-                      tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
-                               awesomeCheckbox(
-                                 inputId = "rescalePop_map_check",
-                                 label = "Riscala sulla popolazione", 
-                                 value = FALSE#,
-                               )
-                      ),
-                      radioGroupButtons(
-                        inputId = "variable_map_radio",
-                        label = "Seleziona che dati vuoi visualizzare",
-                        choices = c("Casi cumulati totali", "Casi per periodo"),
-                        individual = TRUE,
-                        checkIcon = list(
-                          yes = tags$i(class = "fa fa-circle", 
-                                       style = "color: steelblue"),
-                          no = tags$i(class = "fa fa-circle-o", 
-                                      style = "color: steelblue"))
-                      )
-                    )
-                ),
-                box(id = "map_container",
+                  box(#fid = "map_container",
                     width = 7,
-                    leaflet::leafletOutput("map_leaflet",
-                                           width = "100%", height = "100%")
+                    tabsetPanel(id = "plots_tabPanel",
+                                tabPanel(title = "Casi totali",
+                                         value = "plot_cases_tot_panel",
+                                         # plotly::plotlyOutput("plot_cases_tot",
+                                         #                      width = "100%", height = "100%") %>% 
+                                         ggiraph::girafeOutput("plot_cases_tot",
+                                                               width = "100%", height = "100%") %>%
+                                           withSpinner()
+                                ),
+                                tabPanel(title = "Casi giornalieri",
+                                         value = "plot_cases_new_panel",
+                                         # plotly::plotlyOutput("plot_cases_new",
+                                         #                      width = "100%", height = "100%") %>% 
+                                         ggiraph::girafeOutput("plot_cases_new",
+                                                               width = "100%", height = "100%") %>%
+                                           withSpinner())
+                    )
+                  )
+                  # )
+                  # )
                 )
-              )
+                
+        ),
+        # Tab tables ####
+        tabItem(tabName = "tab_tables",
+                fluidRow(
+                  # box(
+                  # width = 8, height = 6,
+                  wellPanel(
+                    radioGroupButtons(
+                      inputId = "regionalDetail_radio_tab",
+                      label = "Seleziona il dettaglio",
+                      choices = c("Italia", "Regioni", "Province"),
+                      individual = TRUE,
+                      checkIcon = list(
+                        yes = tags$i(class = "fa fa-circle", 
+                                     style = "color: steelblue"),
+                        no = tags$i(class = "fa fa-circle-o", 
+                                    style = "color: steelblue"))
+                    ),
+                    DT::dataTableOutput("table_provinces")
+                    # )
+                  )
+                )
+        ),
+        # Tab maps ####
+        tabItem(tabName = "tab_maps",
+                fluidRow(
+                  box(width = 5,
+                      tags$h4("Opzioni"),
+                      wellPanel(
+                        tags$div(title = "Premi il tasto play per visualizzare l'evoluzione nel tempo",
+                                 # sliderInput("day_slider", "Giorno di riferimento",
+                                 #             min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                                 #             value = max(covid_prov$data),
+                                 #             animate = T
+                                 # )
+                                 uiOutput("day_slider")
+                        ),
+                        tags$b("Seleziona se vuoi riscalare i dati sulla popolazione"),
+                        tags$br(),
+                        tags$div(title = "Seleziona questo checkbox per visualizzare il numero di casi ogni 100000 abitanti al posto del numero di casi totali",
+                                 awesomeCheckbox(
+                                   inputId = "rescalePop_map_check",
+                                   label = "Riscala sulla popolazione", 
+                                   value = FALSE#,
+                                 )
+                        ),
+                        radioGroupButtons(
+                          inputId = "variable_map_radio",
+                          label = "Seleziona che dati vuoi visualizzare",
+                          choices = c("Casi cumulati totali", "Casi per periodo"),
+                          individual = TRUE,
+                          checkIcon = list(
+                            yes = tags$i(class = "fa fa-circle", 
+                                         style = "color: steelblue"),
+                            no = tags$i(class = "fa fa-circle-o", 
+                                        style = "color: steelblue"))
+                        )
+                      )
+                  ),
+                  box(id = "map_container",
+                      width = 7,
+                      leaflet::leafletOutput("map_leaflet",
+                                             width = "100%", height = "100%")
+                  )
+                )
+        )
       )
-    )
-  
-  })
+      
+    })
 )
 
 
@@ -850,7 +876,7 @@ server <- function(input, output, session){
       ) %>%
       unnest(data)
   })
-    
+  
   
   
   # Plots ####
@@ -869,7 +895,7 @@ server <- function(input, output, session){
                  group = get(selecting_detail()))) +
       labs(color = selected_detail_label(),
            y = str_c(variable_description(), onpop_description()))
-  
+    
   })
   
   plot_cases_new <- reactive({
@@ -926,7 +952,7 @@ server <- function(input, output, session){
                                  alpha = .4,
                                  show.legend = FALSE)
           }
-            
+          
           p <- p +
             geom_line(data = covid_fitted_tot(),
                       aes(y = get(str_c("fit", onpop()))),
@@ -965,15 +991,15 @@ server <- function(input, output, session){
     # ggplotly(p, tooltip = "text")
     girafe(ggobj = p,
            options = list(opts_tooltip(#offx = 80, offy = 20, use_cursor_pos = FALSE,
-                                       use_cursor_pos = TRUE,
-                                       use_fill = TRUE,
-                                       css = tooltip_css),
-                          opts_hover(css = hoven_css),
-                          # opts_sizing(rescale = TRUE, width = 1),
-                          opts_sizing(rescale = FALSE),
-                          opts_selection(type = "none"),
-                          opts_toolbar(saveaspng = FALSE),
-                          opts_zoom(max = 2)),
+             use_cursor_pos = TRUE,
+             use_fill = TRUE,
+             css = tooltip_css),
+             opts_hover(css = hoven_css),
+             # opts_sizing(rescale = TRUE, width = 1),
+             opts_sizing(rescale = FALSE),
+             opts_selection(type = "none"),
+             opts_toolbar(saveaspng = FALSE),
+             opts_zoom(max = 2)),
            # fonts = list(sans = "Roboto"),
            width_svg = 5.5, height_svg = 4.5)
   }
@@ -994,7 +1020,7 @@ server <- function(input, output, session){
     plot_cases(version = "new")
   })
   
-
+  
   # Choose province by region ####
   observeEvent(input$regioni_displayed, {
     province_init <- reg_prov %>% 
@@ -1030,7 +1056,7 @@ server <- function(input, output, session){
     updatePickerInput(session = session, inputId = "regioni_displayed_2",
                       selected = "")
   }, ignoreInit = TRUE)
-
+  
   
   # Select top n regions ####
   observeEvent(input$select_top_n_reg_button, {
@@ -1055,7 +1081,7 @@ server <- function(input, output, session){
   
   observeEvent(input$select_top_n_reg_button_ok, {
     # print(input$top_n)
-
+    
     if(input$criteria %in% c("casi_tot", "casi_tot_onpop")){
       regioni_toSelect <- covid_reg %>%
         filter(data == max(data)) %>% 
@@ -1073,14 +1099,19 @@ server <- function(input, output, session){
         .$denominazione_regione
     }
     
-    if(input$regionalDetail_radio == "Regioni"){
-      updatePickerInput(session = session, inputId = "regioni_displayed_2",
-                        selected = regioni_toSelect)  
-    } else {
-      updatePickerInput(session = session, inputId = "regioni_displayed",
-                        selected = regioni_toSelect)  
-    }
-
+    # if(input$regionalDetail_radio == "Regioni"){
+    #   updatePickerInput(session = session, inputId = "regioni_displayed_2",
+    #                     selected = regioni_toSelect)
+    # } else {
+    #   updatePickerInput(session = session, inputId = "regioni_displayed",
+    #                     selected = regioni_toSelect)
+    # }
+    
+    # regioni_toSelect <- "Valle d\\'Aosta"
+    
+    updatePickerInput(session = session, inputId = "regioni_displayed_2",
+                      selected = regioni_toSelect)
+    
     removeModal()
   }, ignoreInit = TRUE)
   
@@ -1217,19 +1248,81 @@ server <- function(input, output, session){
   
   
   
-  # # Create table ####
-  # output$table_provinces <- DT::renderDataTable({
-  #   covid_prov %>% 
-  #     select(data,
-  #            denominazione_regione,
-  #            denominazione_provincia,
-  #            casi_tot, casi_tot_onpop,
-  #            casi_new, casi_new_onpop
-  #            ) %>% 
-  #     mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
-  #            casi_new_onpop = round(casi_new_onpop, 2)) %>% 
-  #     arrange(desc(data), desc(casi_tot))
-  # })
+  # Create table ####
+  output$table_provinces <- DT::renderDataTable({
+    if(input$regionalDetail_radio_tab == "Italia"){
+      covid_ita %>% 
+        select(data,
+               casi_tot, casi_tot_onpop, casi_new,
+               deced_tot, deced_tot_onpop, deced_new,
+               positivi_tot, osped_tot, terap_tot
+        ) %>%
+        mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
+               deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
+        filter(data == max(data)) %>%
+        select(-data) %>% 
+        arrange(desc(casi_tot)) %>% 
+        rename(`Casi tot.` = casi_tot,
+               `Nuovi casi` = casi_new,
+               `Casi tot. / 100k ab.` = casi_tot_onpop,
+               `Decessi tot.` = deced_tot,
+               `Nuovi decessi` = deced_new,
+               `Decessi tot. / 100k ab.` = deced_tot_onpop,
+               `Positivi` = positivi_tot,
+               `Ospedalizz.` = osped_tot,
+               `Terap. intensiva` = terap_tot
+        ) %>% 
+        mutate(Nazione = "Italia") %>% 
+        select(Nazione, everything())
+      
+    } else if(input$regionalDetail_radio_tab == "Regioni"){
+      covid_reg %>% 
+        select(data,
+               denominazione_regione,
+               casi_tot, casi_tot_onpop, casi_new,
+               deced_tot, deced_tot_onpop, deced_new,
+               positivi_tot, osped_tot, terap_tot
+        ) %>%
+        mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
+               deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
+        filter(data == max(data)) %>%
+        select(-data) %>% 
+        arrange(desc(casi_tot)) %>% 
+        rename(Regione = denominazione_regione,
+               `Casi tot.` = casi_tot,
+               `Nuovi casi` = casi_new,
+               `Casi tot. / 100k ab.` = casi_tot_onpop,
+               `Decessi tot.` = deced_tot,
+               `Nuovi decessi` = deced_new,
+               `Decessi tot. / 100k ab.` = deced_tot_onpop,
+               `Positivi` = positivi_tot,
+               `Ospedalizz.` = osped_tot,
+               `Terap. intensiva` = terap_tot
+        )
+      
+    } else {
+      covid_prov %>%
+        select(data,
+               denominazione_regione,
+               denominazione_provincia,
+               casi_tot, casi_tot_onpop,
+               casi_new, casi_new_onpop
+        ) %>%
+        mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
+               casi_new_onpop = round(casi_new_onpop, 2)) %>%
+        filter(data == max(data)) %>%
+        select(-data) %>% 
+        arrange(desc(casi_tot)) %>%
+        rename(Regione = denominazione_regione,
+               Provincia = denominazione_provincia,
+               `Casi totali` = casi_tot,
+               `Casi tot / 100k ab.` = casi_tot_onpop,
+               `Nuovi casi` = casi_new,
+               `Nuoi casi / 100k ab.` = casi_new_onpop) %>% 
+        select(Provincia, Regione, everything())
+      # arrange(desc(data), desc(casi_tot))
+    }
+  }, options = list(scrollX = TRUE))
   
   
   # Create leaflet map ####
@@ -1305,7 +1398,7 @@ server <- function(input, output, session){
         left_join(covid_prov %>%
                     filter(data == input$day_slider1),
                   by = c("SIGLA" = "sigla_provincia"))
-
+      
       if(input$rescalePop_map_check){
         leafletProxy("map_leaflet", data = map_prov) %>%
           addPolygons(layerId = ~SIGLA,
@@ -1339,9 +1432,9 @@ server <- function(input, output, session){
                     mutate(casi_tot = if_else(casi_tot < 0, 0, casi_tot),
                            casi_tot_onpop = if_else(casi_tot_onpop < 0, 0, casi_tot_onpop),
                            popup_casi = str_c("<b>", denominazione_provincia, "</b>",
-                                         "<br>Periodo: ", input$day_slider2[1], ", ", input$day_slider2[2],
-                                         "<br>Totale casi nel periodo: ", casi_tot,
-                                         "<br>Totale casi nel periodo / pop: ", round(casi_tot_onpop, 2), " /100 000")),
+                                              "<br>Periodo: ", input$day_slider2[1], ", ", input$day_slider2[2],
+                                              "<br>Totale casi nel periodo: ", casi_tot,
+                                              "<br>Totale casi nel periodo / pop: ", round(casi_tot_onpop, 2), " /100 000")),
                   by = c("SIGLA" = "sigla_provincia"))
       
       if(input$rescalePop_map_check){
@@ -1384,7 +1477,7 @@ server <- function(input, output, session){
   
   # Close server session when the browser tab get closed
   session$onSessionEnded(stopApp)
-    
+  
 }
 
 
