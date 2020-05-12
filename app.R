@@ -661,17 +661,40 @@ ui <- dashboardPage(
                   # box(
                   # width = 8, height = 6,
                   wellPanel(
-                    radioGroupButtons(
-                      inputId = "regionalDetail_radio_tab",
-                      label = "Seleziona il dettaglio",
-                      choices = c("Italia", "Regioni", "Province"),
-                      individual = TRUE,
-                      checkIcon = list(
-                        yes = tags$i(class = "fa fa-circle", 
-                                     style = "color: steelblue"),
-                        no = tags$i(class = "fa fa-circle-o", 
-                                    style = "color: steelblue"))
-                    ),
+                    # div(class = "col-sm-12 col-md-6 col-lg-4",
+                    box(
+                      # width = 12,
+                      radioGroupButtons(
+                        inputId = "regionalDetail_radio_tab",
+                        label = "Seleziona il dettaglio",
+                        choices = c("Italia", "Regioni", "Province"),
+                        individual = TRUE,
+                        checkIcon = list(
+                          yes = tags$i(class = "fa fa-circle",
+                                       style = "color: steelblue"),
+                          no = tags$i(class = "fa fa-circle-o",
+                                      style = "color: steelblue")
+                        )
+                      ),
+                      # sliderInput("day_table_slider", "Giorno di riferimento",
+                      #             min = min(covid_ita$data), max = max(covid_ita$data), step = 1,
+                      #             value = max(covid_ita$data),
+                      #             animate = F
+                      # ),
+                      # div(class = "col-sm-12 col-md-6 col-lg-4",
+                      dateInput(
+                        "day_table",
+                        "Giorno di riferimento",
+                        min = min(covid_ita$data),
+                        max = max(covid_ita$data),
+                        value = max(covid_ita$data),
+                        language = "it",
+                        format = "dd/mm/yyyy",
+                        width = "10cm"
+                      )
+                      # )
+                    # )
+                    ), 
                     DT::dataTableOutput("table_provinces")
                     # )
                   )
@@ -1049,12 +1072,15 @@ server <- function(input, output, session){
   
   # Deselect everything ####
   observeEvent(input$deselect_button, {
-    updatePickerInput(session = session, inputId = "regioni_displayed",
-                      selected = "")
-    updatePickerInput(session = session, inputId = "province_displayed",
-                      selected = "")
-    updatePickerInput(session = session, inputId = "regioni_displayed_2",
-                      selected = "")
+    if(input$regionalDetail_radio == "Province"){
+      updatePickerInput(session = session, inputId = "regioni_displayed",
+                        selected = "")
+      updatePickerInput(session = session, inputId = "province_displayed",
+                        selected = "")  
+    } else if(input$regionalDetail_radio == "Regioni"){
+      updatePickerInput(session = session, inputId = "regioni_displayed_2",
+                        selected = "")  
+    }
   }, ignoreInit = TRUE)
   
   
@@ -1259,7 +1285,8 @@ server <- function(input, output, session){
         ) %>%
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
-        filter(data == max(data)) %>%
+        # filter(data == max(data)) %>%
+        filter(data == input$day_table) %>%
         select(-data) %>% 
         arrange(desc(casi_tot)) %>% 
         rename(`Casi tot.` = casi_tot,
@@ -1285,7 +1312,8 @@ server <- function(input, output, session){
         ) %>%
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
-        filter(data == max(data)) %>%
+        # filter(data == max(data)) %>%
+        filter(data == input$day_table) %>%
         select(-data) %>% 
         arrange(desc(casi_tot)) %>% 
         rename(Regione = denominazione_regione,
@@ -1310,7 +1338,8 @@ server <- function(input, output, session){
         ) %>%
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                casi_new_onpop = round(casi_new_onpop, 2)) %>%
-        filter(data == max(data)) %>%
+        # filter(data == max(data)) %>%
+        filter(data == input$day_table) %>%
         select(-data) %>% 
         arrange(desc(casi_tot)) %>%
         rename(Regione = denominazione_regione,
