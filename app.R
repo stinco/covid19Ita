@@ -11,7 +11,7 @@ library(tidyverse)
 library(forcats)
 library(RCurl)
 library(rgdal)
-library(rmapshaper)
+library(rmapshaper)        # For ms_simplify()
 library(plotly)            # For interactive plots
 library(ggiraph)           # For interactive plots
 library(leaflet)
@@ -60,9 +60,13 @@ covid_prov <- covid_prov %>%
 covid_prov <- covid_prov %>% 
   mutate(data = as.Date(data)) %>% 
   # fix the name of the province Trientino Alto Adige
-  mutate(denominazione_regione = if_else(codice_regione == "04",
+  # mutate(denominazione_regione = if_else(codice_regione == "04",
+  mutate(denominazione_regione = if_else(codice_regione %in% c("04", "21", "22"),
                                          "Trentino Alto Adige",
-                                         denominazione_regione))
+                                         denominazione_regione),
+         codice_regione = if_else(codice_regione %in% c("04", "21", "22"),
+                                  "04",
+                                  codice_regione))
 
 # Remove the apostrophe in regions names
 covid_prov <- covid_prov %>% 
@@ -174,9 +178,13 @@ covid_reg <- covid_reg %>%
          terap_tot = terapia_intensiva
   ) %>% 
   # fix the name of the province Trientino Alto Adige
-  mutate(denominazione_regione = if_else(codice_regione == "04",
+  mutate(denominazione_regione = if_else(codice_regione %in% c("04", "21", "22"),
+  # mutate(denominazione_regione = if_else(codice_regione == "04",
                                          "Trentino Alto Adige",
-                                         denominazione_regione)) %>% 
+                                         denominazione_regione),
+  codice_regione = if_else(codice_regione %in% c("04", "21", "22"),
+                           "04",
+                           codice_regione)) %>% 
   group_by(data, stato, codice_regione, denominazione_regione) %>% 
   summarize(casi_tot = sum(casi_tot),
             deced_tot = sum(deced_tot),
@@ -682,20 +690,20 @@ ui <- dashboardPage(
                       #             animate = F
                       # ),
                       # div(class = "col-sm-12 col-md-6 col-lg-4",
-                      dateInput(
-                        "day_table",
-                        "Giorno di riferimento",
-                        min = min(covid_ita$data),
-                        max = max(covid_ita$data),
-                        value = max(covid_ita$data),
-                        language = "it",
-                        format = "dd/mm/yyyy",
-                        width = "10cm"
-                      )
+                      # dateInput(
+                      #   "day_table",
+                      #   "Giorno di riferimento",
+                      #   min = min(covid_ita$data),
+                      #   max = max(covid_ita$data),
+                      #   value = max(covid_ita$data),
+                      #   language = "it",
+                      #   format = "dd/mm/yyyy",
+                      #   width = "10cm"
+                      # )
                       # )
                     # )
                     ), 
-                    DT::dataTableOutput("table_provinces")
+                    DT::dataTableOutput("table")
                     # )
                   )
                 )
@@ -1275,7 +1283,7 @@ server <- function(input, output, session){
   
   
   # Create table ####
-  output$table_provinces <- DT::renderDataTable({
+  output$table <- DT::renderDataTable({
     if(input$regionalDetail_radio_tab == "Italia"){
       covid_ita %>% 
         select(data,
@@ -1286,9 +1294,9 @@ server <- function(input, output, session){
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
         # filter(data == max(data)) %>%
-        filter(data == input$day_table) %>%
-        select(-data) %>% 
-        arrange(desc(casi_tot)) %>% 
+        # filter(data == input$day_table) %>%
+        # select(-data) %>% 
+        arrange(desc(data), desc(casi_tot)) %>% 
         rename(`Casi tot.` = casi_tot,
                `Nuovi casi` = casi_new,
                `Casi tot. / 100k ab.` = casi_tot_onpop,
@@ -1313,9 +1321,9 @@ server <- function(input, output, session){
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                deced_tot_onpop = round(deced_tot_onpop, 2)) %>%
         # filter(data == max(data)) %>%
-        filter(data == input$day_table) %>%
-        select(-data) %>% 
-        arrange(desc(casi_tot)) %>% 
+        # filter(data == input$day_table) %>%
+        # select(-data) %>% 
+        arrange(desc(data), desc(casi_tot)) %>% 
         rename(Regione = denominazione_regione,
                `Casi tot.` = casi_tot,
                `Nuovi casi` = casi_new,
@@ -1326,7 +1334,8 @@ server <- function(input, output, session){
                `Positivi` = positivi_tot,
                `Ospedalizz.` = osped_tot,
                `Terap. intensiva` = terap_tot
-        )
+        ) %>% 
+        select(Regione, data, everything())
       
     } else {
       covid_prov %>%
@@ -1339,19 +1348,23 @@ server <- function(input, output, session){
         mutate(casi_tot_onpop = round(casi_tot_onpop, 2),
                casi_new_onpop = round(casi_new_onpop, 2)) %>%
         # filter(data == max(data)) %>%
-        filter(data == input$day_table) %>%
-        select(-data) %>% 
-        arrange(desc(casi_tot)) %>%
+        # filter(data == input$day_table) %>%
+        # select(-data) %>% 
+        arrange(desc(data), desc(casi_tot)) %>%
         rename(Regione = denominazione_regione,
                Provincia = denominazione_provincia,
                `Casi totali` = casi_tot,
                `Casi tot / 100k ab.` = casi_tot_onpop,
                `Nuovi casi` = casi_new,
                `Nuoi casi / 100k ab.` = casi_new_onpop) %>% 
-        select(Provincia, Regione, everything())
+        select(Provincia, Regione, data, everything())
       # arrange(desc(data), desc(casi_tot))
     }
-  }, options = list(scrollX = TRUE))
+  },
+  filter = "top",
+  options = list(scrollX = TRUE,
+                 searchHighlight = TRUE)
+  )
   
   
   # Create leaflet map ####
