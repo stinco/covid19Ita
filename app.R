@@ -1063,7 +1063,7 @@ server <- function(input, output, session){
              css = tooltip_css),
              opts_hover(css = hoven_css),
              # opts_sizing(rescale = TRUE, width = 1),
-             opts_sizing(rescale = FALSE),
+             # opts_sizing(rescale = FALSE),
              opts_selection(type = "none"),
              opts_toolbar(saveaspng = FALSE),
              opts_zoom(max = 2))#,
