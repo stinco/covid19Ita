@@ -1,9 +1,9 @@
 #####
 # shiny02_dashboard
 # Creation date: 28/03/2020
-# Version date: 6/05/2020
+# Version date: 22/09/2020
 # Author: Leonardo Stincone
-# R 4.0.0
+# R 4.0.2
 #####
 
 # Libraries ####
@@ -47,8 +47,9 @@ covid_prov <- read_csv(url_prov, na = "",
                                         lat = col_double(),
                                         long = col_double(),
                                         totale_casi = col_double(),
-                                        note_it = col_character(),
-                                        note_en = col_character()))
+                                        # note_it = col_character(),
+                                        # note_en = col_character(),
+                                        note = col_character()))
 # covid_prov <- read_csv("www/data/dpc-covid19-ita-province.csv", na = "")
 
 # Remove summary rows
@@ -159,11 +160,14 @@ covid_reg <- read_csv(url_reg, na = "",
                                        nuovi_positivi = col_double(),
                                        dimessi_guariti = col_double(),
                                        deceduti = col_double(),
+                                       casi_da_sospetto_diagnostico = col_double(),
+                                       casi_da_screening = col_double(),
                                        totale_casi = col_double(),
                                        tamponi = col_double(),
                                        casi_testati = col_double(),
-                                       note_it = col_character(),
-                                       note_en = col_character()))
+                                       # note_it = col_character(),
+                                       # note_en = col_character(),
+                                       note = col_character()))
 # covid_reg <- read_csv("www/data/dpc-covid19-ita-regioni.csv", na = "")
 
 # Mutate date-time into date
@@ -556,7 +560,12 @@ ui <- dashboardPage(
                       actionButton("select_top_n_reg_button",
                                    "Seleziona le prime n regioni"),
                       actionButton("select_top_n_prov_button",
-                                   "Seleziona le prime n province")
+                                   "Seleziona le prime n province"),
+                      sliderInput("plot_day_slider", "Seleziona il periodo di riferimento",
+                                  min = min(covid_prov$data), max = max(covid_prov$data), step = 1,
+                                  value = c(max(covid_prov$data) - 60, max(covid_prov$data)),
+                                  animate = T
+                      )
                       # )
                       # )
                     ),
@@ -610,8 +619,8 @@ ui <- dashboardPage(
                       ),
                       hidden(
                         sliderInput("span_slider", "Seleziona il livello di smoothness della curva approssimante",
-                                    min = 0, max = 5, step = .01,
-                                    value = 2
+                                    min = 0, max = 2, step = .01,
+                                    value = 1
                         )
                       )
                     )
@@ -621,19 +630,19 @@ ui <- dashboardPage(
                       setHeight = function() {
                         var window_height = $(window).height();
                         var header_height = $(".main-header").height();
-                
+
                         var boxHeight = window_height - header_height - 50;
-                
+
                         $("#map_container").height(boxHeight);
                         $("#map").height(boxHeight - 20);
                       };
-                
+
                       // Set input$box_height when the connection is established
                       $(document).on("shiny:connected", function(event) {
                         setHeight();
                       });
-                
-                      // Refresh the box height on every window resize event    
+
+                      // Refresh the box height on every window resize event
                       $(window).on("resize", function(){
                         setHeight();
                       });
@@ -641,6 +650,7 @@ ui <- dashboardPage(
                   box(#fid = "map_container",
                     width = 7,
                     tabsetPanel(id = "plots_tabPanel",
+                                selected = "plot_cases_new_panel",
                                 tabPanel(title = "Casi totali",
                                          value = "plot_cases_tot_panel",
                                          # plotly::plotlyOutput("plot_cases_tot",
@@ -864,7 +874,7 @@ server <- function(input, output, session){
       group_by(get(selecting_detail())) %>%
       nest() %>%
       # mutate(model = map(data, function(x){model_tot(x, sp = input$span_slider)})) %>%
-      mutate(model = map(data, function(x){model(variable = variable(), version = "tot", df = x, sp = exp(input$span_slider + .01))})) %>%
+      mutate(model = map(data, function(x){model(variable = variable(), version = "tot", df = x, sp = exp(input$span_slider + .001))})) %>%
       mutate(
         data = map2(data, model,
                     function(data, model){
@@ -889,7 +899,7 @@ server <- function(input, output, session){
       group_by(get(selecting_detail())) %>%
       nest() %>%
       # mutate(model = map(data, function(x){model_new(x, sp = input$span_slider)})) %>%
-      mutate(model = map(data, function(x){model(variable = variable(), version = "new", df = x, sp = exp(input$span_slider + .01))})) %>%
+      mutate(model = map(data, function(x){model(variable = variable(), version = "new", df = x, sp = exp(input$span_slider + .001))})) %>%
       mutate(
         data = map2(data, model,
                     function(data, model){
@@ -917,6 +927,9 @@ server <- function(input, output, session){
     #                     "casi", input$variable)
     
     covid_dataset_filtered() %>% 
+      # Seleziono solo i giorni individuati con lo slider
+      filter(data >= input$plot_day_slider[1],
+             data <= input$plot_day_slider[2]) %>% 
       # ggplot(aes(x = data, y = get(str_c("casi", "_tot", onpop())),
       ggplot(aes(x = data, y = get(str_c(variable(), "_tot", onpop())),
                  color = get(selecting_detail()),
@@ -925,12 +938,16 @@ server <- function(input, output, session){
                  data_id = get(str_c("popup_", variable())),
                  group = get(selecting_detail()))) +
       labs(color = selected_detail_label(),
-           y = str_c(variable_description(), onpop_description()))
+           y = str_c(variable_description(), onpop_description())) +
+      expand_limits(y = 0)
     
   })
   
   plot_cases_new <- reactive({
     covid_dataset_filtered() %>% 
+      # Seleziono solo i giorni individuati con lo slider
+      filter(data >= input$plot_day_slider[1],
+             data <= input$plot_day_slider[2]) %>% 
       ggplot(aes(x = data, y = get(str_c(variable(), "_new", onpop())),
                  color = get(selecting_detail()),
                  # text = get(str_c("popup_", variable())),
@@ -938,7 +955,8 @@ server <- function(input, output, session){
                  data_id = get(str_c("popup_", variable())),
                  group = get(selecting_detail()))) +
       labs(color = selected_detail_label(),
-           y = str_c(variable_description(), onpop_description()))
+           y = str_c(variable_description(), onpop_description())) +
+      expand_limits(y = 0)
     
   })
   
@@ -974,7 +992,10 @@ server <- function(input, output, session){
         
         if(version == "tot"){
           if(input$showSE_check){
-            p <- p + geom_ribbon(data = covid_fitted_tot(),
+            p <- p + geom_ribbon(data = covid_fitted_tot() %>% 
+                                   # Seleziono solo i giorni individuati con lo slider
+                                   filter(data >= input$plot_day_slider[1],
+                                          data <= input$plot_day_slider[2]),
                                  aes(ymin = get(str_c("lower", onpop())),
                                      ymax = get(str_c("upper", onpop())),
                                      # y = get(str_c("fit", onpop())),
@@ -985,17 +1006,26 @@ server <- function(input, output, session){
           }
           
           p <- p +
-            geom_line(data = covid_fitted_tot(),
+            geom_line(data = covid_fitted_tot() %>%
+                        # Seleziono solo i giorni individuati con lo slider
+                        filter(data >= input$plot_day_slider[1],
+                               data <= input$plot_day_slider[2]),
                       aes(y = get(str_c("fit", onpop()))),
                       size = 1) +
-            geom_point_interactive(data = covid_fitted_tot(),
+            geom_point_interactive(data = covid_fitted_tot() %>% 
+                                     # Seleziono solo i giorni individuati con lo slider
+                                     filter(data >= input$plot_day_slider[1],
+                                            data <= input$plot_day_slider[2]),
                                    aes(y = get(str_c("fit", onpop()))),
                                    size = .1)
           
         } else {
           
           if(input$showSE_check){
-            p <- p + geom_ribbon(data = covid_fitted_new(),
+            p <- p + geom_ribbon(data = covid_fitted_new() %>% 
+                                   # Seleziono solo i giorni individuati con lo slider
+                                   filter(data >= input$plot_day_slider[1],
+                                          data <= input$plot_day_slider[2]),
                                  aes(ymin = get(str_c("lower", onpop())),
                                      ymax = get(str_c("upper", onpop())),
                                      # y = get(str_c("fit", onpop())),
@@ -1006,10 +1036,16 @@ server <- function(input, output, session){
           }
           
           p <- p +
-            geom_line(data = covid_fitted_new(),
+            geom_line(data = covid_fitted_new() %>%
+                        # Seleziono solo i giorni individuati con lo slider
+                        filter(data >= input$plot_day_slider[1],
+                               data <= input$plot_day_slider[2]),
                       aes(y = get(str_c("fit", onpop()))),
                       size = 1) +
-            geom_point_interactive(data = covid_fitted_new(),
+            geom_point_interactive(data = covid_fitted_new() %>% 
+                                     # Seleziono solo i giorni individuati con lo slider
+                                     filter(data >= input$plot_day_slider[1],
+                                            data <= input$plot_day_slider[2]),
                                    aes(y = get(str_c("fit", onpop()))),
                                    size = .1)
           
@@ -1030,9 +1066,10 @@ server <- function(input, output, session){
              opts_sizing(rescale = FALSE),
              opts_selection(type = "none"),
              opts_toolbar(saveaspng = FALSE),
-             opts_zoom(max = 2)),
+             opts_zoom(max = 2))#,
            # fonts = list(sans = "Roboto"),
-           width_svg = 5.5, height_svg = 4.5)
+           # width_svg = 5.5, height_svg = 4.5
+    )
   }
   
   
@@ -1268,6 +1305,7 @@ server <- function(input, output, session){
       updateTabsetPanel(session = session, inputId = "plots_tabPanel", selected = "plot_cases_tot_panel")
       hideTab(inputId = "plots_tabPanel", target = "plot_cases_new_panel")
     } else {
+      updateTabsetPanel(session = session, inputId = "plots_tabPanel", selected = "plot_cases_new_panel")
       showTab(inputId = "plots_tabPanel", target = "plot_cases_new_panel")
     }
   })
